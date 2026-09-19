@@ -374,22 +374,19 @@ export function CatalogoTab({ products, recipes = [], ingredients: propIngredien
       showToast('⚠️ Ingresá el nombre del postre')
       return
     }
-    if (isNaN(finalCost) || finalCost < 0) {
-      showToast('⚠️ Ingresá un costo válido')
-      return
-    }
+    const safeCost = (isNaN(finalCost) || finalCost < 0) ? 0 : finalCost
     if (isNaN(parsedPrice) || parsedPrice <= 0) {
       showToast('⚠️ Ingresá un precio de venta válido')
       return
     }
 
-    const manualCostValue = parsedCost > 0 ? parsedCost : (savedManualCost ?? finalCost)
+    const manualCostValue = parsedCost > 0 ? parsedCost : (savedManualCost ?? safeCost)
 
     setLoading(true)
     await onSaveProduct({
       id: editingProduct?.id,
       name: name.trim(),
-      cost: finalCost,
+      cost: safeCost,
       price: parsedPrice,
       emoji,
       category: finalCategory,
@@ -625,271 +622,294 @@ export function CatalogoTab({ products, recipes = [], ingredients: propIngredien
         </div>
       )}
 
-      {/* Edit / New Product Modal */}
+      {/* Edit / New Product Modal (Responsive with Sticky Header & Sticky Footer) */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md overflow-y-auto">
-          <div className="glass-panel-glow rounded-3xl p-6 max-w-md w-full border border-pink-300 bg-white shadow-2xl my-8 relative animate-scale-up">
-            <h3 className="font-playfair text-xl font-bold text-gradient-pink mb-4">
-              {editingProduct ? 'Editar Postre' : 'Nuevo Postre en Catálogo'}
-            </h3>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Product Name Input (Required) */}
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-md">
+          <div className="glass-panel-glow rounded-3xl border border-pink-300 bg-white shadow-2xl max-w-lg w-full max-h-[92vh] flex flex-col overflow-hidden animate-scale-up">
+            
+            {/* Sticky Header */}
+            <div className="px-6 py-4 border-b border-pink-100 flex items-center justify-between flex-shrink-0 bg-white/95">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
-                  <span>Nombre del Postre / Producto</span>
-                  <span className="text-rose-500 font-bold">* Requerido</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ej: Tarta de Ricota, Tarta Cabsha, Lemon Pie..."
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  className="w-full glass-input rounded-xl px-4 py-2.5 text-sm font-bold text-slate-800 bg-white border-pink-300 focus:border-pink-500 focus:ring-2 focus:ring-pink-200"
-                />
+                <h3 className="font-playfair text-xl font-bold text-gradient-pink">
+                  {editingProduct ? 'Editar Postre' : 'Nuevo Postre en Catálogo'}
+                </h3>
+                <p className="text-[11px] text-slate-500">Completá los datos del postre para la venta</p>
               </div>
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-pink-50 transition-colors"
+                title="Cerrar ventana"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-              {/* Emoji Picker */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Emoji Icono</label>
-                <div className="flex flex-wrap gap-2 p-2 rounded-xl bg-pink-50/60 border border-pink-200/70">
-                  {EMOJIS.map(e => (
-                    <button
-                      key={e}
-                      type="button"
-                      onClick={() => setEmoji(e)}
-                      className={`text-xl p-1.5 rounded-lg transition-transform ${
-                        emoji === e ? 'bg-pink-200/80 border border-pink-400 scale-110 shadow-sm' : 'hover:scale-105'
-                      }`}
-                    >
-                      {e}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Photo Selector */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Fotografía del Postre (Para el Menú Público)</label>
-                <div className="space-y-2">
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setImageUrl('/images/desserts/sol_pote_oreo.jpg')}
-                      className={`p-2 rounded-xl border text-[11px] font-bold flex items-center gap-1.5 transition-all ${
-                        imageUrl === '/images/desserts/sol_pote_oreo.jpg' ? 'bg-pink-100 border-pink-500 text-pink-700 shadow-sm' : 'bg-slate-50 border-slate-200 text-slate-600'
-                      }`}
-                    >
-                      <span>🍧 Potes Oreo (Foto Real)</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setImageUrl('/images/desserts/sol_tarta_cabsha.png')}
-                      className={`p-2 rounded-xl border text-[11px] font-bold flex items-center gap-1.5 transition-all ${
-                        imageUrl === '/images/desserts/sol_tarta_cabsha.png' ? 'bg-pink-100 border-pink-500 text-pink-700 shadow-sm' : 'bg-slate-50 border-slate-200 text-slate-600'
-                      }`}
-                    >
-                      <span>🥧 Tarta Cabsha (Foto Real)</span>
-                    </button>
-                  </div>
-
-                  <div className="pt-1">
-                    <label className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-sm transition-all">
-                      <span>📷 Subir Foto desde iPhone / Galería</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleFileUpload}
-                        className="hidden"
-                      />
-                    </label>
-                  </div>
-
+            {/* Form with scrollable body */}
+            <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+              <div className="p-6 overflow-y-auto flex-1 space-y-4">
+                
+                {/* Product Name Input (Required) */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                    <span>Nombre del Postre / Producto</span>
+                    <span className="text-rose-500 font-bold">* Requerido</span>
+                  </label>
                   <input
                     type="text"
-                    placeholder="O pegá la URL de una foto (https://...)"
-                    value={imageUrl}
-                    onChange={e => setImageUrl(e.target.value)}
-                    className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 bg-white border-pink-200"
+                    required
+                    placeholder="Ej: Tarta de Ricota, Tarta Cabsha, Lemon Pie..."
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    className="w-full glass-input rounded-xl px-4 py-2.5 text-sm font-bold text-slate-800 bg-white border-pink-300 focus:border-pink-500 focus:ring-2 focus:ring-pink-200"
                   />
                 </div>
-              </div>
 
-              {/* Description for Public Menu */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Descripción Comercial (Se muestra en el Menú Público)</label>
-                <textarea
-                  rows={2}
-                  placeholder="Ej: Tarta artesanal de chocolate cobertura 70% con dulce de leche repostero en masa quebrada suiza..."
-                  value={description}
-                  onChange={e => setDescription(e.target.value)}
-                  className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 bg-white border-pink-200"
-                />
-              </div>
+                {/* Emoji Picker */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">Emoji Icono</label>
+                  <div className="flex flex-wrap gap-2 p-2 rounded-xl bg-pink-50/60 border border-pink-200/70">
+                    {EMOJIS.map(e => (
+                      <button
+                        key={e}
+                        type="button"
+                        onClick={() => setEmoji(e)}
+                        className={`text-xl p-1.5 rounded-lg transition-transform ${
+                          emoji === e ? 'bg-pink-200/80 border border-pink-400 scale-110 shadow-sm' : 'hover:scale-105'
+                        }`}
+                      >
+                        {e}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-              {/* Linked Recipe Dropdown */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1">
-                  <ChefHat className="w-3.5 h-3.5 text-pink-500" />
-                  <span>Receta Vinculada</span>
-                </label>
-                <select
-                  value={selectedRecipeId}
-                  onChange={e => {
-                    const rId = e.target.value
-                    setSelectedRecipeId(rId)
-                    if (rId) {
-                      setIsAutoCost(true)
-                      const foundRecipe = recipes.find(r => r.id === rId)
-                      if (foundRecipe) {
-                        if (!name.trim()) {
-                          setName(foundRecipe.title)
-                        }
-                        if (foundRecipe.category && (!category || category === 'Tartas')) {
-                          setCategory(foundRecipe.category)
-                        }
-                      }
-                    }
-                  }}
-                  className="w-full glass-input rounded-xl px-4 py-2.5 text-xs text-slate-800 bg-white border-pink-200"
-                >
-                  <option value="">-- Sin receta vinculada (Costo manual) --</option>
-                  {recipes.map(r => (
-                    <option key={r.id} value={r.id}>
-                      📖 {r.title} [{r.category || 'General'}] ({r.yield || 'Base'})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Category */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Categoría</label>
-                <select
-                  value={isCustomCategory ? '__CUSTOM__' : category}
-                  onChange={e => {
-                    if (e.target.value === '__CUSTOM__') {
-                      setIsCustomCategory(true)
-                    } else {
-                      setIsCustomCategory(false)
-                      setCategory(e.target.value)
-                    }
-                  }}
-                  className="w-full glass-input rounded-xl px-4 py-2.5 text-sm text-slate-800 bg-white border-pink-200"
-                >
-                  {categoriesList.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                  <option value="__CUSTOM__">+ Nueva categoría personalizada...</option>
-                </select>
-
-                {isCustomCategory && (
-                  <input
-                    type="text"
-                    placeholder="Escribí el nombre de la nueva categoría (Ej: Cupcakes, Alfajores...)"
-                    value={customCategory}
-                    onChange={e => setCustomCategory(e.target.value)}
-                    className="w-full glass-input rounded-xl px-4 py-2.5 text-xs text-slate-800 bg-white mt-2 border-pink-300"
-                  />
-                )}
-              </div>
-
-              {/* Cost & Price Section */}
-              <div className="p-4 rounded-2xl bg-pink-50/50 border border-pink-200/70 space-y-3">
-                {/* Auto Cost Toggle */}
-                {selectedRecipe ? (
+                {/* Photo Selector */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Fotografía del Postre (Para el Menú Público)</label>
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                        <Calculator className="w-3.5 h-3.5 text-pink-500" />
-                        <span>Modo de Costo</span>
-                      </span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setImageUrl('/images/desserts/sol_pote_oreo.jpg')}
+                        className={`p-2 rounded-xl border text-[11px] font-bold flex items-center gap-1.5 transition-all ${
+                          imageUrl === '/images/desserts/sol_pote_oreo.jpg' ? 'bg-pink-100 border-pink-500 text-pink-700 shadow-sm' : 'bg-slate-50 border-slate-200 text-slate-600'
+                        }`}
+                      >
+                        <span>🍧 Potes Oreo (Foto Real)</span>
+                      </button>
 
                       <button
                         type="button"
-                        onClick={() => handleToggleAutoCost(!isAutoCost)}
-                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 border transition-all ${
-                          isAutoCost
-                            ? 'bg-pink-500 text-white border-pink-400 shadow-sm'
-                            : 'bg-amber-500 text-white border-amber-400 shadow-sm'
+                        onClick={() => setImageUrl('/images/desserts/sol_tarta_cabsha.png')}
+                        className={`p-2 rounded-xl border text-[11px] font-bold flex items-center gap-1.5 transition-all ${
+                          imageUrl === '/images/desserts/sol_tarta_cabsha.png' ? 'bg-pink-100 border-pink-500 text-pink-700 shadow-sm' : 'bg-slate-50 border-slate-200 text-slate-600'
                         }`}
                       >
-                        {isAutoCost ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
-                        <span>{isAutoCost ? 'Automático (Receta)' : 'Personalizado (Manual)'}</span>
+                        <span>🥧 Tarta Cabsha (Foto Real)</span>
                       </button>
                     </div>
 
-                    {!isAutoCost && savedManualCost !== null && (
-                      <div className="flex items-center justify-between text-[11px] pt-1">
-                        <span className="text-slate-500">Costo manual guardado: <strong>{fmt(savedManualCost)}</strong></span>
+                    <div className="pt-1">
+                      <label className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-sm transition-all">
+                        <span>📷 Subir Foto desde Celular / Galería</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleFileUpload}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+
+                    <input
+                      type="text"
+                      placeholder="O pegá la URL de una foto (https://...)"
+                      value={imageUrl}
+                      onChange={e => setImageUrl(e.target.value)}
+                      className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 bg-white border-pink-200"
+                    />
+                  </div>
+                </div>
+
+                {/* Description for Public Menu */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Descripción Comercial (Se muestra en el Menú Público)</label>
+                  <textarea
+                    rows={2}
+                    placeholder="Ej: Tarta artesanal de chocolate cobertura 70% con dulce de leche repostero en masa quebrada suiza..."
+                    value={description}
+                    onChange={e => setDescription(e.target.value)}
+                    className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 bg-white border-pink-200"
+                  />
+                </div>
+
+                {/* Linked Recipe Dropdown */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1">
+                    <ChefHat className="w-3.5 h-3.5 text-pink-500" />
+                    <span>Receta Vinculada</span>
+                  </label>
+                  <select
+                    value={selectedRecipeId}
+                    onChange={e => {
+                      const rId = e.target.value
+                      setSelectedRecipeId(rId)
+                      if (rId) {
+                        setIsAutoCost(true)
+                        const foundRecipe = recipes.find(r => r.id === rId)
+                        if (foundRecipe) {
+                          if (!name.trim()) {
+                            setName(foundRecipe.title)
+                          }
+                          if (foundRecipe.category && (!category || category === 'Tartas')) {
+                            setCategory(foundRecipe.category)
+                          }
+                        }
+                      }
+                    }}
+                    className="w-full glass-input rounded-xl px-4 py-2.5 text-xs text-slate-800 bg-white border-pink-200 cursor-pointer"
+                  >
+                    <option value="">-- Sin receta vinculada (Costo manual) --</option>
+                    {recipes.map(r => (
+                      <option key={r.id} value={r.id}>
+                        📖 {r.title} ({r.category || 'General'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Category Selector */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Categoría</label>
+                  <select
+                    value={isCustomCategory ? '__CUSTOM__' : category}
+                    onChange={e => {
+                      if (e.target.value === '__CUSTOM__') {
+                        setIsCustomCategory(true)
+                      } else {
+                        setIsCustomCategory(false)
+                        setCategory(e.target.value)
+                      }
+                    }}
+                    className="w-full glass-input rounded-xl px-4 py-2.5 text-xs text-slate-800 bg-white border-pink-200 cursor-pointer"
+                  >
+                    {categoriesList.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                    <option value="__CUSTOM__">+ Nueva categoría personalizada...</option>
+                  </select>
+
+                  {isCustomCategory && (
+                    <input
+                      type="text"
+                      placeholder="Escribí el nombre de la nueva categoría..."
+                      value={customCategory}
+                      onChange={e => setCustomCategory(e.target.value)}
+                      className="w-full glass-input rounded-xl px-4 py-2 text-xs text-slate-800 bg-white border-pink-300 mt-2"
+                      required
+                    />
+                  )}
+                </div>
+
+                {/* Pricing & Cost Box */}
+                <div className="p-4 rounded-2xl bg-pink-50/50 border border-pink-200/70 space-y-3">
+                  {selectedRecipe ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                          <Calculator className="w-3.5 h-3.5 text-pink-500" />
+                          <span>Modo de Costo</span>
+                        </span>
+
                         <button
                           type="button"
-                          onClick={handleRevertCost}
-                          className="text-pink-600 hover:text-pink-700 font-bold underline"
+                          onClick={() => handleToggleAutoCost(!isAutoCost)}
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 border transition-all ${
+                            isAutoCost
+                              ? 'bg-pink-500 text-white border-pink-400 shadow-sm'
+                              : 'bg-amber-500 text-white border-amber-400 shadow-sm'
+                          }`}
                         >
-                          Restablecer costo
+                          {isAutoCost ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
+                          <span>{isAutoCost ? 'Automático (Receta)' : 'Personalizado (Manual)'}</span>
                         </button>
                       </div>
-                    )}
-                  </div>
-                ) : (
-                  <span className="text-xs font-bold text-slate-700 block">Precios del Postre</span>
-                )}
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-rose-600 mb-1 flex items-center justify-between">
-                      <span>Costo Insumos ($)</span>
-                      {selectedRecipe && (
-                        <span className={`text-[10px] font-bold ${isAutoCost ? 'text-pink-600' : 'text-amber-600'}`}>
-                          {isAutoCost ? '(Auto)' : '(Manual)'}
-                        </span>
+                      {!isAutoCost && savedManualCost !== null && (
+                        <div className="flex items-center justify-between text-[11px] pt-1">
+                          <span className="text-slate-500">Costo manual guardado: <strong>{fmt(savedManualCost)}</strong></span>
+                          <button
+                            type="button"
+                            onClick={handleRevertCost}
+                            className="text-pink-600 hover:text-pink-700 font-bold underline"
+                          >
+                            Restablecer costo
+                          </button>
+                        </div>
                       )}
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      placeholder="4500"
-                      disabled={selectedRecipe ? isAutoCost : false}
-                      value={cost}
-                      onChange={e => setCost(e.target.value)}
-                      className={`w-full glass-input rounded-xl px-3 py-2 text-sm font-bold text-slate-800 bg-white border-pink-200 ${
-                        selectedRecipe && isAutoCost ? 'opacity-80 bg-pink-100/50 cursor-not-allowed' : ''
-                      }`}
-                    />
-                  </div>
+                    </div>
+                  ) : (
+                    <span className="text-xs font-bold text-slate-700 block">Precios del Postre</span>
+                  )}
 
-                  <div>
-                    <label className="block text-xs font-semibold text-emerald-600 mb-1">Precio Venta ($)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      placeholder="12000"
-                      value={price}
-                      onChange={e => setPrice(e.target.value)}
-                      className="w-full glass-input rounded-xl px-3 py-2 text-sm font-bold text-slate-800 bg-white border-pink-200"
-                    />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-rose-600 mb-1 flex items-center justify-between">
+                        <span>Costo Insumos ($)</span>
+                        {selectedRecipe && (
+                          <span className={`text-[10px] font-bold ${isAutoCost ? 'text-pink-600' : 'text-amber-600'}`}>
+                            {isAutoCost ? '(Auto)' : '(Manual)'}
+                          </span>
+                        )}
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        placeholder="0"
+                        disabled={selectedRecipe ? isAutoCost : false}
+                        value={cost}
+                        onChange={e => setCost(e.target.value)}
+                        className={`w-full glass-input rounded-xl px-3 py-2 text-sm font-bold text-slate-800 bg-white border-pink-200 ${
+                          selectedRecipe && isAutoCost ? 'opacity-80 bg-pink-100/50 cursor-not-allowed' : ''
+                        }`}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-emerald-600 mb-1 flex items-center justify-between">
+                        <span>Precio Venta ($)</span>
+                        <span className="text-rose-500 text-[10px] font-bold">* Requerido</span>
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        required
+                        placeholder="Ej: 4500"
+                        value={price}
+                        onChange={e => setPrice(e.target.value)}
+                        className="w-full glass-input rounded-xl px-3 py-2 text-sm font-bold text-slate-800 bg-white border-pink-300 focus:border-pink-500"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Submit / Cancel */}
-              <div className="flex items-center gap-3 pt-3">
+              {/* Sticky Footer (Always Visible on all screen sizes) */}
+              <div className="px-6 py-4 border-t border-pink-100 flex items-center gap-3 bg-pink-50/60 flex-shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="flex-1 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-600 transition-colors"
+                  className="flex-1 py-3 px-4 rounded-xl bg-white border border-slate-200 hover:bg-slate-100 text-xs font-bold text-slate-600 transition-colors shadow-sm"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  disabled={loading}
-                  className="flex-1 py-3 rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 to-rose-600 text-white font-bold text-xs shadow-md shadow-pink-500/20"
+                  disabled={loading || !name.trim() || !price}
+                  className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-pink-500 via-rose-500 to-pink-600 hover:from-pink-600 hover:to-rose-600 text-white font-bold text-xs shadow-md shadow-pink-500/25 disabled:opacity-50 flex items-center justify-center gap-2 transition-all active:scale-95"
                 >
-                  {loading ? 'Guardando...' : 'Guardar Producto'}
+                  {loading ? 'Guardando...' : (editingProduct ? '✓ Actualizar Postre' : '✨ Guardar Postre')}
                 </button>
               </div>
             </form>
