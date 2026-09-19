@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useRef } from 'react'
 import { Product, Sale, Order, Customer, Recipe, IngredientMaster } from '@/lib/types'
 import { NumericStepper } from '@/components/ui/NumericStepper'
 import { DessertScannerModal } from '@/components/ui/DessertScannerModal'
@@ -149,9 +149,13 @@ export function ComercialTab({
     }
   }
 
+  const isSubmittingRef = useRef(false)
+
   // Handle Submit Form (either Direct Sale or Pre-Order)
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (loading || isSubmittingRef.current) return
+
     const pName = selectedProduct ? selectedProduct.name : customProductName.trim()
     if (!pName) {
       showToast('⚠️ Seleccioná o ingresá un postre')
@@ -169,6 +173,7 @@ export function ComercialTab({
       finalCustName = customerId
     }
 
+    isSubmittingRef.current = true
     setLoading(true)
 
     try {
@@ -247,6 +252,7 @@ export function ComercialTab({
       showToast('⚠️ Error al registrar la operación')
     } finally {
       setLoading(false)
+      isSubmittingRef.current = false
     }
   }
 

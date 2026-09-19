@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState, useMemo, useEffect, useRef } from 'react'
 import { Product, Recipe, IngredientMaster } from '@/lib/types'
 import { fetchMasterIngredients } from '@/lib/supabase'
 import { BookOpen, PlusCircle, Edit3, Trash2, CheckCircle2, XCircle, Tag, Sparkles, ChefHat, Calculator, Lock, Unlock, MessageCircle, Plus, Minus, X, DollarSign, Wallet, Filter, Camera } from 'lucide-react'
@@ -311,8 +311,12 @@ export function CatalogoTab({ products, recipes = [], ingredients: propIngredien
     }
   }
 
+  const isSubmittingRef = useRef(false)
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (loading || isSubmittingRef.current) return
+
     let parsedCost = parseFloat(cost) || 0
     const parsedPrice = parseFloat(price) || 0
 
@@ -339,25 +343,34 @@ export function CatalogoTab({ products, recipes = [], ingredients: propIngredien
 
     const manualCostValue = parsedCost > 0 ? parsedCost : (savedManualCost ?? safeCost)
 
+    isSubmittingRef.current = true
     setLoading(true)
-    await onSaveProduct({
-      id: editingProduct?.id,
-      name: name.trim(),
-      cost: safeCost,
-      price: parsedPrice,
-      emoji,
-      category: finalCategory,
-      image_url: imageUrl.trim() || undefined,
-      description: description.trim() || undefined,
-      recipe_id: selectedRecipeId || undefined,
-      active: editingProduct?.active ?? true,
-      is_auto_cost: validAutoCost !== null,
-      manual_cost: manualCostValue
-    })
 
-    showToast(editingProduct ? '✓ Producto actualizado' : '✨ Nuevo producto agregado al catálogo!')
-    setIsModalOpen(false)
-    setLoading(false)
+    try {
+      await onSaveProduct({
+        id: editingProduct?.id,
+        name: name.trim(),
+        cost: safeCost,
+        price: parsedPrice,
+        emoji,
+        category: finalCategory,
+        image_url: imageUrl.trim() || undefined,
+        description: description.trim() || undefined,
+        recipe_id: selectedRecipeId || undefined,
+        active: editingProduct?.active ?? true,
+        is_auto_cost: validAutoCost !== null,
+        manual_cost: manualCostValue
+      })
+
+      showToast(editingProduct ? '✓ Producto actualizado' : '✨ Nuevo producto agregado al catálogo!')
+      setIsModalOpen(false)
+    } catch (err) {
+      console.error(err)
+      showToast('⚠️ Error al guardar el producto')
+    } finally {
+      setLoading(false)
+      isSubmittingRef.current = false
+    }
   }
 
   const handleToggleActive = async (p: Product) => {
