@@ -348,7 +348,7 @@ export function MainDashboard({ initialTab = 'pedidos' }: { initialTab?: ActiveT
         />
 
         {/* Main Content Area */}
-        <main className="relative z-10 max-w-7xl w-full mx-auto px-4 pt-6 flex-1">
+        <main className="max-w-7xl w-full mx-auto px-4 pt-6 flex-1">
           {loadingData ? (
             <div className="text-center py-20 text-slate-400 text-sm">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-500 mx-auto mb-3" />

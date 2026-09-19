@@ -624,8 +624,8 @@ export function CatalogoTab({ products, recipes = [], ingredients: propIngredien
 
       {/* Edit / New Product Modal (Responsive with Sticky Header & Sticky Footer) */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-md">
-          <div className="glass-panel-glow rounded-3xl border border-pink-300 bg-white shadow-2xl max-w-lg w-full max-h-[92vh] flex flex-col overflow-hidden animate-scale-up">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-6 pb-20 sm:pb-6 bg-slate-900/60 backdrop-blur-md">
+          <div className="glass-panel-glow rounded-3xl border border-pink-300 bg-white shadow-2xl max-w-lg w-full max-h-[88vh] flex flex-col overflow-hidden animate-scale-up">
             
             {/* Sticky Header */}
             <div className="px-6 py-4 border-b border-pink-100 flex items-center justify-between flex-shrink-0 bg-white/95">

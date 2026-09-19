@@ -55,7 +55,7 @@ export function LogoHeader({ activeTab, setActiveTab, onLock, isOnline = true }:
   return (
     <>
       {/* Mobile Fixed 4-Item Bottom Navigation Bar (Pedidos first) */}
-      <nav aria-label="Navegación principal" className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-xl border-t border-pink-200/80 shadow-[0_-4px_20px_rgba(244,114,182,0.15)] px-3 py-2">
+      <nav aria-label="Navegación principal" className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-xl border-t border-pink-200/80 shadow-[0_-4px_20px_rgba(244,114,182,0.15)] px-3 py-2">
         <div className="grid grid-cols-4 gap-2 max-w-md mx-auto">
           {primaryTabs.map(tab => {
             const Icon = tab.icon
