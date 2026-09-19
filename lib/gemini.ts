@@ -68,6 +68,27 @@ export async function compressImageForGemini(base64Image: string, maxDimension =
 }
 
 /**
+ * Helper seguro para parsear respuestas JSON de Gemini sin riesgo de crash por undefined
+ */
+export function parseGeminiJson<T>(data: any): T {
+  const textOutput = data?.candidates?.[0]?.content?.parts?.[0]?.text
+  if (!textOutput || typeof textOutput !== 'string') {
+    const finishReason = data?.candidates?.[0]?.finishReason
+    if (finishReason === 'SAFETY') {
+      throw new Error('La imagen no pudo ser procesada por los filtros de seguridad de Gemini.')
+    }
+    throw new Error('Gemini no devolvió una respuesta de texto estructurada.')
+  }
+
+  const clean = textOutput.replace(/```json/gi, '').replace(/```/g, '').trim()
+  const firstBrace = clean.indexOf('{')
+  const lastBrace = clean.lastIndexOf('}')
+  const jsonStr = (firstBrace !== -1 && lastBrace > firstBrace) ? clean.substring(firstBrace, lastBrace + 1) : clean
+
+  return JSON.parse(jsonStr) as T
+}
+
+/**
  * Escanea un ticket/factura en papel usando Gemini Vision AI con respuesta JSON Estricta
  */
 export async function analyzeReceiptWithGemini(base64Image: string): Promise<ScannedReceiptResult> {
@@ -127,14 +148,7 @@ export async function analyzeReceiptWithGemini(base64Image: string): Promise<Sca
     }
 
     const data = await res.json()
-    const textOutput = data.candidates?.[0]?.content?.parts?.[0]?.text
-    const clean = textOutput.replace(/```json/gi, '').replace(/```/g, '').trim()
-    const firstBrace = clean.indexOf('{')
-    const lastBrace = clean.lastIndexOf('}')
-    const jsonStr = (firstBrace !== -1 && lastBrace > firstBrace) ? clean.substring(firstBrace, lastBrace + 1) : clean
-
-    const parsed = JSON.parse(jsonStr) as ScannedReceiptResult
-    return parsed
+    return parseGeminiJson<ScannedReceiptResult>(data)
   } catch (err: any) {
     console.error('Error procesando ticket con Gemini:', err)
     throw err
@@ -199,14 +213,7 @@ export async function analyzeDessertsPhotoWithGemini(base64Image: string, availa
     }
 
     const data = await res.json()
-    const textOutput = data.candidates?.[0]?.content?.parts?.[0]?.text
-    const clean = textOutput.replace(/```json/gi, '').replace(/```/g, '').trim()
-    const firstBrace = clean.indexOf('{')
-    const lastBrace = clean.lastIndexOf('}')
-    const jsonStr = (firstBrace !== -1 && lastBrace > firstBrace) ? clean.substring(firstBrace, lastBrace + 1) : clean
-
-    const parsed = JSON.parse(jsonStr) as ScannedDessertResult
-    return parsed
+    return parseGeminiJson<ScannedDessertResult>(data)
   } catch (err: any) {
     console.error('Error analizando foto de postres con Gemini:', err)
     throw err

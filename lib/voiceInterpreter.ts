@@ -89,7 +89,9 @@ Proporciona un speech_response cálido, claro y entusiasta que confirme en lengu
 
     const data = await res.json()
     const textOutput = data.candidates?.[0]?.content?.parts?.[0]?.text
-    if (!textOutput) throw new Error('No se recibió respuesta de Gemini AI')
+    if (!textOutput || typeof textOutput !== 'string') {
+      throw new Error('No se recibió respuesta válida de Gemini AI')
+    }
 
     const clean = textOutput.replace(/```json/gi, '').replace(/```/g, '').trim()
     const firstBrace = clean.indexOf('{')
@@ -99,45 +101,89 @@ Proporciona un speech_response cálido, claro y entusiasta que confirme en lengu
     return JSON.parse(jsonStr) as VoiceInterpreterResult
   } catch (err: any) {
     console.warn('Fallback a interpretador heurístico por voz:', err)
-    
-    // Deterministic Rule Parser Fallback for kitchen speech
-    const lower = spokenText.toLowerCase()
-    const actions: InterpretedAction[] = []
+    return parseVoiceHeuristics(spokenText)
+  }
+}
 
-    if (lower.includes('pedido')) {
-      actions.push({
-        type: 'ADD_ORDER',
-        data: { customer_name: 'Cliente Dictado', product_name: 'Pedido Registrado por Voz', quantity: 1, price: 5000 }
-      })
-    }
-    if (lower.includes('venta')) {
-      actions.push({
-        type: 'RECORD_SALE',
-        data: { product_name: 'Venta Registrada por Voz', quantity: 1, price: 4500 }
-      })
-    }
-    if (lower.includes('ingrediente') || lower.includes('insumo') || lower.includes('harina') || lower.includes('compr')) {
-      actions.push({
-        type: 'ADD_INGREDIENT',
-        data: { ingredient_name: 'Insumo Dictado por Voz', quantity: 1000, amount: 2500 }
-      })
-    }
-    if (lower.includes('local') || lower.includes('pote') || lower.includes('tarta')) {
-      actions.push({
-        type: 'DELIVER_TO_FAMILY_STORE',
-        data: { product_name: 'Postre en Pote', quantity: 1 }
-      })
-    }
-    if (lower.includes('gasto') || lower.includes('alquiler') || lower.includes('luz') || lower.includes('gas') || actions.length === 0) {
+/**
+ * Deterministic Rule Parser Fallback for kitchen speech (Offline / Fallback)
+ */
+export function parseVoiceHeuristics(spokenText: string): VoiceInterpreterResult {
+  const text = (spokenText || '').trim()
+  const lower = text.toLowerCase()
+  const actions: InterpretedAction[] = []
+
+  // Helper to extract first number and optional unit (e.g. "10kg", "5 postres", "2 tartas")
+  const numMatch = text.match(/(\d+)(?:\s*(kg|kilos|g|gramos|u|unidades))?/i)
+  const extractedNum = numMatch ? parseInt(numMatch[1], 10) : null
+  const extractedUnit = numMatch && numMatch[2] ? numMatch[2].toLowerCase() : null
+
+  // Helper to detect amount (e.g. "8500 pesos", "$5000", "gasté 4000")
+  const amountMatch = text.match(/(\$?\s*\b\d{3,7}\b(?:\s*pesos)?)/i)
+  const extractedAmount = amountMatch ? parseInt(amountMatch[1].replace(/[^\d]/g, ''), 10) : (extractedNum && extractedNum > 500 ? extractedNum : null)
+
+  if (lower.includes('pedido') || lower.includes('encargo')) {
+    actions.push({
+      type: 'ADD_ORDER',
+      data: {
+        customer_name: 'Cliente Dictado',
+        product_name: lower.includes('tarta') ? 'Tarta Cabsha' : 'Pedido Registrado por Voz',
+        quantity: (extractedNum && extractedNum < 50) ? extractedNum : 1,
+        price: extractedAmount || 5000
+      }
+    })
+  }
+
+  if (lower.includes('venta') || lower.includes('vendí') || lower.includes('vendi') || lower.includes('cobré') || lower.includes('cobre')) {
+    actions.push({
+      type: 'RECORD_SALE',
+      data: {
+        product_name: lower.includes('chocotorta') ? 'Chocotorta en Pote' : (lower.includes('oreo') ? 'Postre Oreo en Pote' : 'Venta Registrada por Voz'),
+        quantity: (extractedNum && extractedNum < 50) ? extractedNum : 1,
+        price: extractedAmount || 4500
+      }
+    })
+  }
+
+  if (lower.includes('ingrediente') || lower.includes('insumo') || lower.includes('harina') || lower.includes('compr')) {
+    const isKg = extractedUnit?.includes('k') || lower.includes('kg') || lower.includes('kilo')
+    const finalQty = extractedNum ? (isKg ? extractedNum * 1000 : extractedNum) : 1000
+
+    actions.push({
+      type: 'ADD_INGREDIENT',
+      data: {
+        ingredient_name: lower.includes('harina') ? 'Harina 0000' : (lower.includes('dulce') ? 'Dulce de Leche Repostero' : 'Insumo Dictado'),
+        quantity: finalQty,
+        amount: extractedAmount || 2500
+      }
+    })
+  }
+
+  if (lower.includes('local') || lower.includes('pote') || lower.includes('envio') || lower.includes('enviar')) {
+    actions.push({
+      type: 'DELIVER_TO_FAMILY_STORE',
+      data: {
+        product_name: lower.includes('oreo') ? 'Postre Oreo en Pote' : (lower.includes('chocotorta') ? 'Chocotorta en Pote' : 'Postre en Pote'),
+        quantity: (extractedNum && extractedNum < 50) ? extractedNum : 1
+      }
+    })
+  }
+
+  if (lower.includes('gasto') || lower.includes('gasté') || lower.includes('gaste') || lower.includes('alquiler') || lower.includes('luz') || lower.includes('gas') || actions.length === 0) {
+    if (actions.length === 0 || lower.includes('gasto') || lower.includes('gasté')) {
       actions.push({
         type: 'RECORD_EXPENSE',
-        data: { description: spokenText, amount: 1500, expense_type: 'Variable' }
+        data: {
+          description: text || 'Gasto registrado por voz',
+          amount: extractedAmount || 1500,
+          expense_type: 'Variable'
+        }
       })
     }
+  }
 
-    return {
-      actions,
-      speech_response: `Registré tu dictado de voz (${actions.length} acción/es procesadas).`
-    }
+  return {
+    actions,
+    speech_response: `Registré tu dictado de voz (${actions.length} acción/es procesadas).`
   }
 }
