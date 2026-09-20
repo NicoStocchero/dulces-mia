@@ -101,7 +101,7 @@ export async function cleanAllTestData() {
     const { data: testRecs } = await supabase
       .from('recipes')
       .select('id, title')
-      .or('title.ilike.%test%,title.ilike.%qa%')
+      .or('title.ilike.%test%,title.ilike.%qa%,title.ilike.%e2e%')
 
     if (testRecs && testRecs.length > 0) {
       const realRecipes = ['Tarta Coco 18 cm', 'Tarta Cabsha 18 cm', 'Tarta mini coco 10 cm', 'Mini tarta ricota']

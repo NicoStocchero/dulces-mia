@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useMemo, useRef, useEffect } from 'react'
-import { Recipe, IngredientMaster, RecipeCostSnapshot } from '@/lib/types'
+import { Recipe, IngredientMaster, RecipeCostSnapshot, Product } from '@/lib/types'
 import { fetchMasterIngredients, saveMasterIngredient, deleteMasterIngredient, saveRecipeCostSnapshot } from '@/lib/supabase'
 import { calculateRecipeCost } from '@/components/tabs/CatalogoTab'
 import { BookOpen, PlusCircle, Trash2, Edit3, Sparkles, ChefHat, Tag, Plus, X, AlertCircle, Scale, DollarSign, RefreshCw, Package, History, Lock, TrendingUp, ChevronDown, ChevronUp } from 'lucide-react'
@@ -9,9 +9,11 @@ import { BookOpen, PlusCircle, Trash2, Edit3, Sparkles, ChefHat, Tag, Plus, X, A
 interface RecetasTabProps {
   recipes: Recipe[]
   ingredients?: IngredientMaster[]
+  products?: Product[]
   onSaveRecipe: (recipe: Omit<Recipe, 'id'> & { id?: string }) => Promise<void>
   onDeleteRecipe: (id: string) => Promise<void>
   showToast: (msg: string) => void
+  onNavigateTab?: (tab: any) => void
 }
 
 const fmt = (n: number) => '$' + (n || 0).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
@@ -55,7 +57,7 @@ function formatScaledQuantity(originalStr: string, multiplier: number): string {
   return `${formattedNum} ${unit}`.trim()
 }
 
-export function RecetasTab({ recipes, ingredients: propIngredients, onSaveRecipe, onDeleteRecipe, showToast }: RecetasTabProps) {
+export function RecetasTab({ recipes, ingredients: propIngredients, products = [], onSaveRecipe, onDeleteRecipe, showToast, onNavigateTab }: RecetasTabProps) {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isInsumosModalOpen, setIsInsumosModalOpen] = useState(false)
   const [editingRecipe, setEditingRecipe] = useState<Partial<Recipe> | null>(null)
@@ -347,10 +349,56 @@ export function RecetasTab({ recipes, ingredients: propIngredients, onSaveRecipe
                   {/* Title */}
                   <h3 className="font-playfair text-xl font-bold text-slate-900 mb-1">{r.title}</h3>
                   {r.yield && (
-                    <span className="text-[11px] font-medium text-slate-500 block mb-3">
+                    <span className="text-[11px] font-medium text-slate-500 block mb-2">
                       Base: <strong className="text-slate-700">{r.yield}</strong>
                     </span>
                   )}
+
+                  {/* Linked Catalog Product Banner */}
+                  {(() => {
+                    const linkedProduct = products.find(p => p.recipe_id === r.id || p.name.toLowerCase().trim() === r.title.toLowerCase().trim())
+                    const costData = calculateRecipeCost(r, masterIngredients)
+                    if (linkedProduct) {
+                      const marginPercent = linkedProduct.price > 0 ? (((linkedProduct.price - costData.unitCost) / linkedProduct.price) * 100).toFixed(0) : '0'
+                      return (
+                        <div className="flex items-center justify-between p-2.5 rounded-2xl bg-pink-50/70 border border-pink-200/80 text-xs mb-3">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-base flex-shrink-0">{linkedProduct.emoji || '🍰'}</span>
+                            <div className="min-w-0">
+                              <span className="font-bold text-slate-800 block truncate">Postre: {linkedProduct.name}</span>
+                              <span className="text-[10px] text-slate-500 block truncate">
+                                Venta: <strong>{fmt(linkedProduct.price)}</strong> — Margen: <strong className="text-emerald-600 font-bold">{marginPercent}%</strong>
+                              </span>
+                            </div>
+                          </div>
+                          {onNavigateTab && (
+                            <button
+                              type="button"
+                              onClick={() => onNavigateTab('catalogo')}
+                              className="text-[11px] font-bold text-pink-600 hover:text-pink-700 underline flex items-center gap-0.5 flex-shrink-0 ml-2"
+                              title="Ver y editar en el catálogo de postres"
+                            >
+                              Catálogo →
+                            </button>
+                          )}
+                        </div>
+                      )
+                    }
+                    return (
+                      <div className="flex items-center justify-between p-2 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-500 mb-3">
+                        <span className="text-[11px] italic">⚠️ Sin postre vinculado en catálogo</span>
+                        {onNavigateTab && (
+                          <button
+                            type="button"
+                            onClick={() => onNavigateTab('catalogo')}
+                            className="text-[10px] font-bold text-pink-600 hover:text-pink-700 underline ml-2"
+                          >
+                            + Vincular
+                          </button>
+                        )}
+                      </div>
+                    )
+                  })()}
 
                   {/* Batch Scaler Bar */}
                   <div className="p-3 rounded-2xl bg-gradient-to-r from-pink-500/10 to-rose-500/10 border border-pink-200 mb-4">

@@ -1,5 +1,26 @@
 import { Recipe, IngredientMaster } from './types'
 
+// Helper to normalize strings for comparison (remove accents, lowercase, trim)
+function normalizeText(str: string): string {
+  if (!str) return ''
+  return str
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+}
+
+// Standardize units to 'g', 'kg', 'ml', 'l', or 'u'
+function normalizeUnit(unitStr: string): 'g' | 'kg' | 'ml' | 'l' | 'u' | string {
+  const u = normalizeText(unitStr)
+  if (['g', 'gr', 'grs', 'gramo', 'gramos'].includes(u)) return 'g'
+  if (['kg', 'kilo', 'kilos', 'kgs'].includes(u)) return 'kg'
+  if (['ml', 'cc', 'cm3', 'mililitro', 'mililitros'].includes(u)) return 'ml'
+  if (['l', 'lt', 'lts', 'litro', 'litros'].includes(u)) return 'l'
+  if (['u', 'un', 'uni', 'unidad', 'unidades', 'huevo', 'huevos', 'paquete', 'paquetes'].includes(u)) return 'u'
+  return u
+}
+
 /**
  * Calculates total and unit cost of a recipe based on master ingredient prices,
  * packaging costs, and labor hours with automatic unit conversions.
@@ -18,30 +39,64 @@ export function calculateRecipeCost(
 
   ingredients.forEach(ing => {
     if (!ing || !ing.name) return
-    const master = masterIngredients.find(
-      m => m && m.name && m.name.toLowerCase().trim() === ing.name.toLowerCase().trim()
+
+    const ingNormName = normalizeText(ing.name)
+
+    // 1. Smart matching: exact match first, then partial/substring match
+    let master = masterIngredients.find(
+      m => m && m.name && normalizeText(m.name) === ingNormName
     )
 
-    // Parse quantity number & unit from string like "350g" or "1.5 kg"
-    const match = (ing.quantity || '').match(/^([\d.,]+)\s*([a-zA-ZáéíóúÁÉÍÓÚ]*)$/)
+    if (!master) {
+      master = masterIngredients.find(
+        m => m && m.name && (
+          normalizeText(m.name).includes(ingNormName) ||
+          ingNormName.includes(normalizeText(m.name))
+        )
+      )
+    }
+
+    // Parse quantity number & unit from string like "350g", "130 gr", "1.5 kg", "1 unidad"
+    const match = (ing.quantity || '').toString().match(/^([\d.,]+)\s*([a-zA-ZáéíóúÁÉÍÓÚ\s]*)$/)
     if (match) {
       let num = parseFloat(match[1].replace(',', '.'))
       if (isNaN(num) || num < 0) num = 0
-      const unit = (match[2] || '').toLowerCase().trim()
+      const rawUnit = (match[2] || '').trim()
+      const recipeUnit = normalizeUnit(rawUnit)
 
       if (master && typeof master.package_size === 'number' && master.package_size > 0) {
         const pkgCost = Math.max(0, master.package_cost || 0)
-        const costPerUnit = pkgCost / master.package_size
+        const masterUnit = normalizeUnit(master.unit || 'g')
+        const pkgSize = master.package_size
 
-        // Convert kg to g if master is in g
-        if (unit === 'kg' && master.unit === 'g') num = num * 1000
-        // Convert L to ml if master is in ml
-        if (unit === 'l' && master.unit === 'ml') num = num * 1000
+        // Calculate cost per base unit (g, ml, or u)
+        let costPerBaseUnit = 0
 
-        totalCost += num * costPerUnit
+        if (masterUnit === 'kg') {
+          // pkgSize in kg -> total grams = pkgSize * 1000
+          costPerBaseUnit = pkgCost / (pkgSize * 1000)
+        } else if (masterUnit === 'l') {
+          // pkgSize in L -> total ml = pkgSize * 1000
+          costPerBaseUnit = pkgCost / (pkgSize * 1000)
+        } else {
+          // master in g, ml, or u
+          costPerBaseUnit = pkgCost / pkgSize
+        }
+
+        // Convert recipe quantity to base unit (g, ml, or u)
+        let qtyInBaseUnit = num
+        if (recipeUnit === 'kg') {
+          qtyInBaseUnit = num * 1000
+        } else if (recipeUnit === 'l') {
+          qtyInBaseUnit = num * 1000
+        }
+
+        totalCost += qtyInBaseUnit * costPerBaseUnit
       } else {
-        // Fallback default estimate if ingredient cost not found
-        totalCost += num * 2.5
+        // Fallback default estimate if ingredient cost not found ($2.5 per gram or unit)
+        let mult = num
+        if (recipeUnit === 'kg' || recipeUnit === 'l') mult = num * 1000
+        totalCost += mult * 2.5
       }
     }
   })

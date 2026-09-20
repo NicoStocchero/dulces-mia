@@ -853,6 +853,7 @@ export async function saveRecipe(recipeData: Omit<Recipe, 'id'> & { id?: string 
     packaging_cost: recipeData.packaging_cost || 0,
     labor_hours: recipeData.labor_hours || 0,
     labor_rate: recipeData.labor_rate || 3500,
+    base_servings: recipeData.base_servings || 1,
     cost_history: recipeData.cost_history || [],
     created_at: recipeData.created_at || new Date().toISOString()
   }

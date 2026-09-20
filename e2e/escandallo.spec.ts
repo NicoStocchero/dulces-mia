@@ -182,6 +182,7 @@ test.describe('Consolidador de Producción (Mise en Place)', () => {
       category: 'Tortas',
       price: 15000,
       cost: 4500,
+      emoji: '🍰',
       recipe_id: 'rec-1',
       active: true,
     },

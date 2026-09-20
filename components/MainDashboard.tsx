@@ -442,9 +442,11 @@ export function MainDashboard({ initialTab = 'pedidos' }: { initialTab?: ActiveT
                 <RecetasTab
                   recipes={recipes}
                   ingredients={ingredients}
+                  products={products}
                   onSaveRecipe={handleSaveRecipe}
                   onDeleteRecipe={handleDeleteRecipe}
                   showToast={showToast}
+                  onNavigateTab={(tab) => setActiveTab(tab)}
                 />
               )}
               {activeTab === 'resumen' && (
