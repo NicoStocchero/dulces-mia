@@ -123,36 +123,54 @@ test.describe('Interacción E2E con Modales de Asistente de Voz y Escáner Visua
     })
   })
 
-  test('Asistente de Voz: Permite dictar o escribir orden manual y procesa acciones para Sol', async ({ page }) => {
+  test('Asistente de Voz: Permite dictar o escribir orden manual, revisar acciones y confirmar antes de ejecutar', async ({ page }) => {
     await page.goto('/ventas')
 
-    // 1. Abrir Asistente de Voz desde el botón flotante
-    const voiceBtn = page.getByRole('button', { name: /Asistente IA/i }).or(page.locator('button[title*="Voz"]').first()).or(page.locator('button:has-text("Voz")'))
-    // Si no está flotante directo, buscar en el panel comercial
-    if (await voiceBtn.count() > 0) {
-      await voiceBtn.first().click()
-    } else {
-      // Buscar botón de micrófono en la pantalla
-      const micBtn = page.locator('button:has(.lucide-mic)').first()
-      if (await micBtn.isVisible()) {
-        await micBtn.click()
-      }
-    }
+    // 1. Abrir menú de acciones rápidas y activar el Asistente de Voz
+    const fabBtn = page.getByLabel('Menú de acciones rápidas')
+    await expect(fabBtn).toBeVisible({ timeout: 10000 })
+    await fabBtn.click()
+
+    const voiceBtn = page.getByRole('button', { name: /Asistente de Voz/i })
+    await expect(voiceBtn).toBeVisible({ timeout: 5000 })
+    await voiceBtn.click()
 
     // 2. Verificar que el modal de voz abra
     const voiceModal = page.locator('h3', { hasText: 'Asistente de Voz' })
-    if (await voiceModal.isVisible()) {
-      // 3. Escribir orden manual simulando teclado en cocina
-      const textarea = page.locator('textarea[placeholder*="Hice"]')
-      if (await textarea.isVisible()) {
-        await textarea.fill('Hice 5 postres oreo para enviar al local familiar')
-        const interpretBtn = page.getByRole('button', { name: /Interpretar Dictado/i })
-        await interpretBtn.click()
+    await expect(voiceModal).toBeVisible({ timeout: 10000 })
 
-        // 4. Verificar que se genere la tarjeta de confirmación de acción
-        await expect(page.locator('text=Traslado a Local Familiar').or(page.locator('text=Acción'))).toBeVisible({ timeout: 15000 })
-      }
-    }
+    // 3. Escribir orden manual simulando dictado en cocina
+    const textarea = page.locator('textarea[placeholder*="Hice"]')
+    await expect(textarea).toBeVisible()
+    await textarea.fill('Hice 5 postres oreo para enviar al local familiar')
+
+    // 4. Click en Interpretar Dictado
+    const interpretBtn = page.getByRole('button', { name: /Interpretar Dictado/i })
+    await interpretBtn.click()
+
+    // 5. Verificar que se muestre el Paso 2: Previsualización de acciones y solicitud de confirmación
+    await expect(page.locator('text=Traslado a Local Familiar').or(page.locator('text=Acción'))).toBeVisible({ timeout: 15000 })
+    await expect(page.locator('text=¿Está todo okay para registrar estas acciones en el sistema?')).toBeVisible()
+
+    // 6. Probar botón "Modificar texto" para volver atrás sin perder contenido
+    const modifyBtn = page.getByRole('button', { name: /Modificar texto/i })
+    await expect(modifyBtn).toBeVisible()
+    await modifyBtn.click()
+
+    // Verificar que volvió a la vista de edición con el texto intacto
+    await expect(textarea).toBeVisible()
+    await expect(textarea).toHaveValue('Hice 5 postres oreo para enviar al local familiar')
+
+    // 7. Volver a interpretar y confirmar ejecución
+    await page.getByRole('button', { name: /Interpretar Dictado/i }).click()
+    await expect(page.locator('text=¿Está todo okay para registrar estas acciones en el sistema?')).toBeVisible({ timeout: 15000 })
+    
+    const executeBtn = page.getByRole('button', { name: /Sí, Ejecutar/i })
+    await expect(executeBtn).toBeVisible()
+    await executeBtn.click()
+
+    // El modal debe cerrarse tras ejecutar
+    await expect(voiceModal).not.toBeVisible({ timeout: 10000 })
   })
 
   test('Escáner de Postres: Abre el modal de cámara fotográfica para la mesada', async ({ page }) => {
