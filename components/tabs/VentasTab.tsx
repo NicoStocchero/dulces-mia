@@ -212,7 +212,7 @@ export function VentasTab({ products, sales, onRecordSale, onToggleSalePaid, onD
                 <option value="" className="text-slate-400">-- Seleccionar postre --</option>
                 {categoryFilteredProducts.map(p => (
                   <option key={p.id} value={p.id} className="text-slate-800">
-                    {p.emoji || '🍰'} {p.name} [{p.category || 'General'}] — {fmt(p.price)}
+                    {p.emoji || '🍰'} {p.name} [{p.category || 'General'}] - {fmt(p.price)}
                   </option>
                 ))}
               </select>

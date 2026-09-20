@@ -367,7 +367,7 @@ export function RecetasTab({ recipes, ingredients: propIngredients, products = [
                             <div className="min-w-0">
                               <span className="font-bold text-slate-800 block truncate">Postre: {linkedProduct.name}</span>
                               <span className="text-[10px] text-slate-500 block truncate">
-                                Venta: <strong>{fmt(linkedProduct.price)}</strong> — Margen: <strong className="text-emerald-600 font-bold">{marginPercent}%</strong>
+                                Venta: <strong>{fmt(linkedProduct.price)}</strong> | Margen: <strong className="text-emerald-600 font-bold">{marginPercent}%</strong>
                               </span>
                             </div>
                           </div>

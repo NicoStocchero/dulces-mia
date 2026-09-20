@@ -15,7 +15,7 @@ const outfit = Outfit({
 })
 
 export const metadata: Metadata = {
-  title: 'Dulces Mía — Control de Gestión & Postres Caseros',
+  title: 'Dulces Mía - Control de Gestión y Postres Caseros',
   description: 'Sistema de gestión de ventas, productos y costos para Dulces Mía',
   icons: {
     icon: [

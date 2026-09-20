@@ -174,11 +174,11 @@ export function CatalogoTab({ products, recipes = [], ingredients: propIngredien
     text += `📝 *DETALLE DE PRODUCTOS:*\n`
 
     quoteItems.forEach(item => {
-      text += `• ${item.quantity}x ${item.product.emoji || '🍰'} ${item.product.name} — ${fmt(item.product.price * item.quantity)}\n`
+      text += `• ${item.quantity}x ${item.product.emoji || '🍰'} ${item.product.name}: ${fmt(item.product.price * item.quantity)}\n`
     })
 
     if (parseFloat(quoteDeliveryCost) > 0) {
-      text += `• 🛵 Envío a Domicilio — ${fmt(parseFloat(quoteDeliveryCost))}\n`
+      text += `• 🛵 Envío a Domicilio: ${fmt(parseFloat(quoteDeliveryCost))}\n`
     }
 
     text += `\n💰 *TOTAL PRESUPUESTO: ${fmt(totalQuoteWithDelivery)}*\n`

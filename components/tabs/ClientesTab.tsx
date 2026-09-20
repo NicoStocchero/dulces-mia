@@ -584,7 +584,7 @@ export function ClientesTab({ customers, orders, sales, onSaveCustomer, onDelete
             <div className="flex items-center justify-between border-b border-pink-100 pb-3">
               <div>
                 <h3 className="font-playfair text-lg font-bold text-slate-900">
-                  Historial de Compras — {selectedHistoryCustomer.name}
+                  Historial de Compras - {selectedHistoryCustomer.name}
                 </h3>
                 <p className="text-xs text-pink-600 font-semibold">
                   Total consumido: ${(customerStats.get(selectedHistoryCustomer.id)?.totalSpent || 0).toLocaleString('es-AR')}

@@ -146,7 +146,7 @@ export default function PublicMenuPage() {
 
     text += `*DETALLE DEL PEDIDO:*\n`
     cart.forEach(item => {
-      text += `• ${item.quantity}x ${item.product.name} — ${fmt(item.product.price * item.quantity)}\n`
+      text += `• ${item.quantity}x ${item.product.name}: ${fmt(item.product.price * item.quantity)}\n`
     })
 
     text += `\n*TOTAL PEDIDO: ${fmt(totalCartPrice)}*\n`

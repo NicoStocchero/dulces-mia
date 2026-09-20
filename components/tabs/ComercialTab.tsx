@@ -698,7 +698,7 @@ export function ComercialTab({
                 <option value="">-- Seleccionar producto del catálogo --</option>
                 {activeProducts.map(p => (
                   <option key={p.id} value={p.id}>
-                    {p.emoji || '🍰'} {p.name} [{p.category || 'General'}] — Venta: {fmt(p.price)} | Costo: {fmt(p.cost)}
+                    {p.emoji || '🍰'} {p.name} [{p.category || 'General'}] - Venta: {fmt(p.price)} | Costo: {fmt(p.cost)}
                   </option>
                 ))}
               </select>

@@ -1,4 +1,4 @@
-# 🍰 Dulces Mía — App de Control de Gestión & Postres Caseros
+# 🍰 Dulces Mía - App de Control de Gestión y Postres Caseros
 
 Sistema moderno y completo de gestión de productos, costos, ventas y ganancias para la repostería **Dulces Mía**.
 

@@ -33,7 +33,7 @@ export function generateGeminiBusinessContext({
 
   const netRealProfit = totalSalesProfit - totalExpenses
 
-  let prompt = `# CONTEXTO EJECUTIVO DE NEGOCIO — DULCES MÍA PASTELERÍA
+  let prompt = `# CONTEXTO EJECUTIVO DE NEGOCIO - DULCES MÍA PASTELERÍA
 Fecha del reporte: ${dateStr}
 
 Hola Gemini! Soy Sol, dueña de "Dulces Mía Pastelería Artesanal". Te comparto la información actualizada y estructurada de mi negocio para que me asesores, analices mis finanzas, me sugieras estrategias de precios, ideas de recetas y promociones para mis clientes.
