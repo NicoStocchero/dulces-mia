@@ -72,10 +72,12 @@ export async function fetchProducts(): Promise<Product[]> {
       .order('created_at', { ascending: true })
     if (!error && data) {
       list = data.map(p => {
-        const fallbackCost = (p.manual_cost && p.manual_cost > 0) ? p.manual_cost : (p.cost && p.cost > 0 ? p.cost : 1800)
+        const fallbackCost = (typeof p.manual_cost === 'number' && !isNaN(p.manual_cost))
+          ? p.manual_cost
+          : (typeof p.cost === 'number' && !isNaN(p.cost) ? p.cost : 0)
         return {
           ...p,
-          cost: p.cost && p.cost > 0 ? p.cost : fallbackCost,
+          cost: typeof p.cost === 'number' && !isNaN(p.cost) ? p.cost : fallbackCost,
           is_auto_cost: p.is_auto_cost ?? false,
           manual_cost: fallbackCost
         }

@@ -70,4 +70,49 @@ test.describe('Catálogo de Postres - Responsive & Modal Testing', () => {
 
     await expect(modalHeader).not.toBeVisible()
   })
+
+  test('Permite editar el precio de un postre existente con actualización inmediata', async ({ page }) => {
+    await page.goto('/catalogo')
+
+    const firstCard = page.locator('div.glass-panel', { has: page.locator('button', { hasText: 'Editar' }) }).first()
+    await expect(firstCard).toBeVisible({ timeout: 15000 })
+
+    const editBtn = firstCard.locator('button', { hasText: 'Editar' })
+    await editBtn.click()
+
+    const modalHeader = page.locator('h3', { hasText: 'Editar Postre' })
+    await expect(modalHeader).toBeVisible()
+
+    const priceInput = page.getByPlaceholder(/Ej: 4500/i)
+    await priceInput.fill('9900')
+
+    const updateBtn = page.getByRole('button', { name: /Actualizar Postre/i })
+    await updateBtn.click()
+
+    await expect(modalHeader).not.toBeVisible({ timeout: 10000 })
+    await expect(page.locator('text=$9.900').first()).toBeVisible({ timeout: 10000 })
+  })
+
+  test('Permite abrir el cotizador de presupuestos y armar un presupuesto con seña del 50%', async ({ page }) => {
+    await page.goto('/catalogo')
+
+    const openQuoteBtn = page.getByRole('button', { name: /Armar Presupuesto/i })
+    await expect(openQuoteBtn).toBeVisible({ timeout: 15000 })
+    await openQuoteBtn.click()
+
+    const quoteModal = page.locator('h3', { hasText: 'Armador de Presupuestos' })
+    await expect(quoteModal).toBeVisible()
+
+    // Seleccionar un postre en el selector del cotizador
+    const productSelect = quoteModal.locator('xpath=ancestor::div[contains(@class, "glass-panel-glow")]').locator('select')
+    await productSelect.selectOption({ index: 1 })
+
+    // El modal muestra el cálculo de seña del 50%
+    await expect(page.locator('text=Seña 50%')).toBeVisible()
+
+    // Cerrar el modal con el botón de cerrar
+    const closeBtn = page.getByRole('button', { name: 'Cerrar', exact: true })
+    await closeBtn.click()
+    await expect(quoteModal).not.toBeVisible()
+  })
 })
