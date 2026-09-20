@@ -116,13 +116,32 @@ export async function cleanAllTestData() {
     const { data: testExps } = await supabase
       .from('expenses')
       .select('id, description')
-      .or('description.ilike.%test%,description.ilike.%qa%')
+      .or('description.ilike.%test%,description.ilike.%qa%,description.ilike.%e2e%')
 
     if (testExps && testExps.length > 0) {
       const ids = testExps.map(e => e.id)
       if (ids.length > 0) {
         await supabase.from('expenses').delete().in('id', ids)
         console.log(`  ✓ Eliminados ${ids.length} gastos de prueba.`)
+      }
+    }
+
+    // 7. Insumos de prueba
+    const { data: testIngs } = await supabase
+      .from('ingredients_master')
+      .select('id, name')
+      .or('name.ilike.%test%,name.ilike.%qa%,name.ilike.%e2e%')
+
+    if (testIngs && testIngs.length > 0) {
+      const realIngs = [
+        'Queso crema 290 gr', 'Nuez', 'Perlas comestibles', 'Huevos Maple',
+        'Granas', 'HARINA 0000', 'Margarina', 'Dulce de leche 10 kg la tomasita',
+        'Chocolate cohela 2,5 kg'
+      ]
+      const ids = testIngs.filter(i => !realIngs.includes(i.name)).map(i => i.id)
+      if (ids.length > 0) {
+        await supabase.from('ingredients_master').delete().in('id', ids)
+        console.log(`  ✓ Eliminados ${ids.length} insumos de prueba.`)
       }
     }
 

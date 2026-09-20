@@ -10,7 +10,7 @@ import {
   ShoppingBag, Calendar, DollarSign, TrendingUp, PlusCircle, User, UserPlus,
   Clock, CheckCircle2, Tag, Filter, Sparkles, Trash2, Camera, ClipboardList,
   Store, X, MessageCircle, AlertCircle, Wallet, ListFilter, Search, Package,
-  ChevronRight, ArrowRight, HelpCircle
+  ChevronRight, ArrowRight, HelpCircle, Edit3
 } from 'lucide-react'
 import confetti from 'canvas-confetti'
 
@@ -23,6 +23,7 @@ interface ComercialTabProps {
   ingredients?: IngredientMaster[]
   initialMode?: 'ventas' | 'pedidos'
   onRecordSale: (sale: Omit<Sale, 'id'>) => Promise<void>
+  onUpdateSale?: (sale: Sale) => Promise<void>
   onToggleSalePaid?: (id: string, paid: boolean, paid_at?: string) => Promise<void>
   onDeleteSale: (id: string) => Promise<void>
   onSaveOrder: (order: Omit<Order, 'id'> & { id?: string }) => Promise<void>
@@ -40,8 +41,9 @@ export function ComercialTab({
   customers,
   recipes = [],
   ingredients: propIngredients = [],
-  initialMode = 'ventas',
+  initialMode = 'pedidos',
   onRecordSale,
+  onUpdateSale,
   onToggleSalePaid,
   onDeleteSale,
   onSaveOrder,
@@ -77,12 +79,32 @@ export function ComercialTab({
   const [recentCustomers, setRecentCustomers] = useState<Customer[]>([])
 
   // Filter & View State
-  const [statusFilter, setStatusFilter] = useState<'Todos' | 'Pendientes' | 'En Local' | 'Cobradas' | 'Por Cobrar'>('Todos')
+  const [statusFilter, setStatusFilter] = useState<'Todos' | 'Pendientes' | 'Cobradas' | 'Por Cobrar'>('Todos')
   const [viewMode, setViewMode] = useState<'tabla' | 'tarjetas' | 'agenda'>('tabla')
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('Todas')
   const [searchQuery, setSearchQuery] = useState('')
   const [dateStart, setDateStart] = useState('')
   const [dateEnd, setDateEnd] = useState('')
+
+  // Edit Order Modal State
+  const [editingOrder, setEditingOrder] = useState<Order | null>(null)
+  const [editOrderCustName, setEditOrderCustName] = useState('')
+  const [editOrderProdName, setEditOrderProdName] = useState('')
+  const [editOrderQty, setEditOrderQty] = useState(1)
+  const [editOrderTotalPrice, setEditOrderTotalPrice] = useState('')
+  const [editOrderDeposit, setEditOrderDeposit] = useState('')
+  const [editOrderDeliveryDate, setEditOrderDeliveryDate] = useState('')
+  const [editOrderNotes, setEditOrderNotes] = useState('')
+
+  // Edit Sale Modal State
+  const [editingSale, setEditingSale] = useState<Sale | null>(null)
+  const [editSaleCustName, setEditSaleCustName] = useState('')
+  const [editSaleProdName, setEditSaleProdName] = useState('')
+  const [editSaleQty, setEditSaleQty] = useState(1)
+  const [editSaleRevenue, setEditSaleRevenue] = useState('')
+  const [editSaleCost, setEditSaleCost] = useState('')
+  const [editSaleDate, setEditSaleDate] = useState('')
+  const [editSalePaid, setEditSalePaid] = useState(true)
 
   // Modals
   const [isAIDessertModalOpen, setIsAIDessertModalOpen] = useState(false)
@@ -418,6 +440,90 @@ export function ComercialTab({
     return calculateProductionRequirements(orders, products, recipes, propIngredients)
   }, [orders, products, recipes, propIngredients])
 
+  // Edit Order Handlers
+  const handleOpenEditOrder = (order: Order) => {
+    setEditingOrder(order)
+    setEditOrderCustName(order.customer_name)
+    setEditOrderProdName(order.product_name)
+    setEditOrderQty(order.quantity || 1)
+    setEditOrderTotalPrice(order.total_price ? order.total_price.toString() : '')
+    setEditOrderDeposit(order.deposit ? order.deposit.toString() : '0')
+    setEditOrderDeliveryDate(order.delivery_date ? order.delivery_date.split('T')[0] : '')
+    setEditOrderNotes(order.notes || '')
+  }
+
+  const handleSaveEditOrder = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingOrder) return
+    const parsedTotal = parseFloat(editOrderTotalPrice) || 0
+    const parsedDeposit = parseFloat(editOrderDeposit) || 0
+    const pendingBalance = Math.max(0, parsedTotal - parsedDeposit)
+
+    await onSaveOrder({
+      id: editingOrder.id,
+      customer_id: editingOrder.customer_id,
+      customer_name: editOrderCustName.trim() || editingOrder.customer_name,
+      product_id: editingOrder.product_id,
+      product_name: editOrderProdName.trim() || editingOrder.product_name,
+      quantity: editOrderQty,
+      total_price: parsedTotal,
+      cost: editingOrder.cost,
+      deposit: parsedDeposit,
+      pending_balance: pendingBalance,
+      delivery_date: editOrderDeliveryDate ? new Date(editOrderDeliveryDate + 'T12:00:00').toISOString() : undefined,
+      status: editingOrder.status,
+      notes: editOrderNotes.trim(),
+      created_at: editingOrder.created_at
+    })
+
+    showToast('✓ Pedido actualizado exitosamente')
+    setEditingOrder(null)
+  }
+
+  // Edit Sale Handlers
+  const handleOpenEditSale = (sale: Sale) => {
+    setEditingSale(sale)
+    setEditSaleCustName(sale.customer_name || 'Consumidor Final')
+    setEditSaleProdName(sale.product_name)
+    setEditSaleQty(sale.quantity || 1)
+    setEditSaleRevenue(sale.revenue ? sale.revenue.toString() : '')
+    setEditSaleCost(sale.cost ? sale.cost.toString() : '0')
+    setEditSaleDate(sale.date ? sale.date.split('T')[0] : '')
+    setEditSalePaid(sale.paid !== false)
+  }
+
+  const handleSaveEditSale = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingSale) return
+    const rev = parseFloat(editSaleRevenue) || 0
+    const cst = parseFloat(editSaleCost) || 0
+    const prof = rev - cst
+    const dateISO = editSaleDate ? new Date(editSaleDate + 'T12:00:00').toISOString() : editingSale.date
+
+    const updatedSale: Sale = {
+      ...editingSale,
+      customer_name: editSaleCustName.trim() || 'Consumidor Final',
+      product_name: editSaleProdName.trim() || editingSale.product_name,
+      quantity: editSaleQty,
+      revenue: rev,
+      cost: cst,
+      profit: prof,
+      paid: editSalePaid,
+      paid_at: editSalePaid ? (editingSale.paid_at || dateISO) : undefined,
+      date: dateISO
+    }
+
+    if (onUpdateSale) {
+      await onUpdateSale(updatedSale)
+    } else {
+      await onDeleteSale(editingSale.id)
+      await onRecordSale(updatedSale)
+      showToast('✓ Venta actualizada')
+    }
+
+    setEditingSale(null)
+  }
+
   // Filter Sales list with date, query and status
   const filteredSales = useMemo(() => {
     return sales.filter(s => {
@@ -434,20 +540,33 @@ export function ComercialTab({
         if (!matchesName && !matchesCust) return false
       }
 
+      if (statusFilter === 'Pendientes') return s.paid === false
       if (statusFilter === 'Cobradas') return s.paid !== false
       if (statusFilter === 'Por Cobrar') return s.paid === false
       return true
     })
   }, [sales, dateStart, dateEnd, searchQuery, statusFilter])
 
-  // Pending Orders
+  // Pending Orders (including legacy 'En Local' shown safely)
   const pendingOrders = useMemo(() => {
-    return orders.filter(o => o.status === 'Pendiente')
+    return orders.filter(o => o.status === 'Pendiente' || o.status === 'En Local')
   }, [orders])
 
-  const familyStoreOrders = useMemo(() => {
-    return orders.filter(o => o.status === 'En Local')
-  }, [orders])
+  // Filtered Orders for the cards view
+  const filteredOrders = useMemo(() => {
+    return orders.filter(o => {
+      if (statusFilter === 'Pendientes') return o.status === 'Pendiente' || o.status === 'En Local'
+      if (statusFilter === 'Cobradas') return o.status === 'Entregado'
+      if (statusFilter === 'Por Cobrar') return (o.status === 'Pendiente' || o.status === 'En Local') && (o.pending_balance || 0) > 0
+      return true
+    }).filter(o => {
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase()
+        return o.product_name.toLowerCase().includes(q) || (o.customer_name || '').toLowerCase().includes(q)
+      }
+      return true
+    })
+  }, [orders, statusFilter, searchQuery])
 
   // Aggregate Metrics
   const totalRevenueCobradas = useMemo(() => {
@@ -886,7 +1005,7 @@ export function ComercialTab({
 
               <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
                 {pendingOrders.slice(0, 4).map(o => (
-                  <div key={o.id} className="p-2.5 rounded-xl bg-pink-50/50 border border-pink-100 flex items-center justify-between text-xs">
+                  <div key={o.id} data-testid="pending-order-item" className="p-2.5 rounded-xl bg-pink-50/50 border border-pink-100 flex items-center justify-between text-xs">
                     <div>
                       <span className="font-bold text-slate-900 block">{o.customer_name}</span>
                       <span className="text-[10px] text-pink-600 font-semibold">{o.quantity}x {o.product_name}</span>
@@ -920,18 +1039,24 @@ export function ComercialTab({
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           {/* Status Filter Pills */}
           <div className="flex items-center gap-1 p-1 bg-pink-50/80 rounded-2xl border border-pink-200/60 overflow-x-auto">
-            {(['Todos', 'Pendientes', 'En Local', 'Cobradas', 'Por Cobrar'] as const).map(st => (
+            {(['Todos', 'Pendientes', 'Cobradas', 'Por Cobrar'] as const).map(st => (
               <button
                 key={st}
-                onClick={() => setStatusFilter(st)}
-                className={`py-1.5 px-3 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                onClick={() => {
+                  setStatusFilter(st)
+                  if (st === 'Pendientes') {
+                    setViewMode('tarjetas')
+                  }
+                }}
+                className={`py-1.5 px-3.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
                   statusFilter === st
                     ? 'bg-pink-500 text-white shadow-sm'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                {st === 'Pendientes' ? `Pendientes (${pendingOrders.length})` :
-                 st === 'En Local' ? `En Local (${familyStoreOrders.length})` : st}
+                {st === 'Pendientes' ? `Pendientes de Entrega (${pendingOrders.length})` :
+                 st === 'Cobradas' ? 'Ventas Cobradas' :
+                 st === 'Por Cobrar' ? 'Por Cobrar' : 'Todos'}
               </button>
             ))}
           </div>
@@ -940,22 +1065,22 @@ export function ComercialTab({
           <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200">
             <button
               onClick={() => setViewMode('tabla')}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
                 viewMode === 'tabla' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'
               }`}
             >
               <ListFilter className="w-3.5 h-3.5" />
-              <span>Tabla de Ventas</span>
+              <span>Tabla de Ventas ({filteredSales.length})</span>
             </button>
 
             <button
               onClick={() => setViewMode('tarjetas')}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
                 viewMode === 'tarjetas' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'
               }`}
             >
               <Store className="w-3.5 h-3.5" />
-              <span>Tarjetas Pedidos</span>
+              <span>Tarjetas Pedidos ({pendingOrders.length})</span>
             </button>
           </div>
         </div>
@@ -1105,13 +1230,23 @@ export function ComercialTab({
 
                         {/* Actions */}
                         <td className="py-3.5 px-3 text-center">
-                          <button
-                            onClick={() => onDeleteSale(s.id)}
-                            className="p-1.5 rounded-lg hover:bg-rose-100 text-slate-400 hover:text-rose-600 transition-colors"
-                            title="Eliminar registro"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={() => handleOpenEditSale(s)}
+                              data-testid="edit-sale-btn"
+                              className="p-1.5 rounded-lg hover:bg-pink-100 text-slate-400 hover:text-pink-600 transition-colors"
+                              title="Editar venta"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => onDeleteSale(s.id)}
+                              className="p-1.5 rounded-lg hover:bg-rose-100 text-slate-400 hover:text-rose-600 transition-colors"
+                              title="Eliminar registro"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     )
@@ -1128,100 +1263,110 @@ export function ComercialTab({
             <h3 className="font-playfair text-lg font-bold text-slate-800">
               Seguimiento de Pedidos ({statusFilter})
             </h3>
-            <span className="text-xs text-slate-500 font-medium">{orders.length} pedidos</span>
+            <span className="text-xs text-slate-500 font-medium">{filteredOrders.length} pedidos</span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {orders.map(o => {
-              const isPending = o.status === 'Pendiente'
-              const isEnLocal = o.status === 'En Local'
-              const isDelivered = o.status === 'Entregado'
+          {filteredOrders.length === 0 ? (
+            <div className="text-center py-12 text-slate-400 text-sm">
+              <Sparkles className="w-8 h-8 text-pink-300 mx-auto mb-2" />
+              <p>No se encontraron pedidos con los filtros aplicados.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {filteredOrders.map(o => {
+                const isPending = o.status === 'Pendiente' || o.status === 'En Local'
+                const isDelivered = o.status === 'Entregado'
 
-              return (
-                <div
-                  key={o.id}
-                  data-testid="order-card"
-                  className={`p-5 rounded-3xl border transition-all bg-white flex flex-col justify-between ${
-                    isPending ? 'border-pink-200 shadow-sm' : isEnLocal ? 'border-purple-200 bg-purple-50/20' : 'border-slate-200 opacity-75'
-                  }`}
-                >
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
-                        <User className="w-4 h-4 text-pink-500" />
-                        {o.customer_name}
-                      </span>
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                        isPending ? 'bg-amber-100 text-amber-700' : isEnLocal ? 'bg-purple-100 text-purple-700' : 'bg-emerald-100 text-emerald-700'
-                      }`}>
-                        {o.status}
-                      </span>
-                    </div>
-
-                    <div className="p-3 rounded-2xl bg-pink-50/50 border border-pink-100 mb-3 space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-800">{o.quantity}x {o.product_name}</span>
-                        <span className="text-xs font-black text-pink-600">{fmt(o.total_price)}</span>
-                      </div>
-                      {o.deposit ? (
-                        <div className="flex items-center justify-between text-[11px] text-emerald-700">
-                          <span>Seña abonada: {fmt(o.deposit)}</span>
-                          <span>Saldo pendiente: {fmt(o.pending_balance || 0)}</span>
-                        </div>
-                      ) : null}
-                      {o.delivery_date && (
-                        <span className="text-[10px] text-slate-500 block pt-0.5">
-                          Entrega: {new Date(o.delivery_date).toLocaleDateString('es-AR')}
+                return (
+                  <div
+                    key={o.id}
+                    data-testid="order-card"
+                    className={`p-5 rounded-3xl border transition-all bg-white flex flex-col justify-between ${
+                      isPending ? 'border-pink-200 shadow-sm' : 'border-slate-200 opacity-75'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                          <User className="w-4 h-4 text-pink-500" />
+                          {o.customer_name}
                         </span>
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                          isPending ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+                        }`}>
+                          {isPending ? 'Pendiente de Entrega' : 'Entregado'}
+                        </span>
+                      </div>
+
+                      <div className="p-3 rounded-2xl bg-pink-50/50 border border-pink-100 mb-3 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-800">{o.quantity}x {o.product_name}</span>
+                          <span className="text-xs font-black text-pink-600">{fmt(o.total_price)}</span>
+                        </div>
+                        {o.deposit ? (
+                          <div className="flex items-center justify-between text-[11px] text-emerald-700">
+                            <span>Seña abonada: {fmt(o.deposit)}</span>
+                            <span>Saldo pendiente: {fmt(o.pending_balance || 0)}</span>
+                          </div>
+                        ) : null}
+                        {o.delivery_date && (
+                          <span className="text-[10px] text-slate-500 block pt-0.5">
+                            Entrega: {new Date(o.delivery_date).toLocaleDateString('es-AR')}
+                          </span>
+                        )}
+                        {o.notes && (
+                          <p className="text-[10px] text-slate-500 italic pt-1 border-t border-pink-100/60">
+                            Nota: {o.notes}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
+                      {isPending && (
+                        <>
+                          <button
+                            onClick={() => handleDeliverAndSellOrder(o, true)}
+                            data-testid="deliver-order-btn"
+                            className="flex-1 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm flex items-center justify-center gap-1"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>{o.pending_balance && o.pending_balance > 0 ? `Entregar & Cobrar Saldo (${fmt(o.pending_balance)})` : 'Entregar (Ya Pagado 100%)'}</span>
+                          </button>
+                          <button
+                            onClick={() => handleShareWhatsAppBudget(o)}
+                            data-testid="order-card-wa-btn"
+                            className="p-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200"
+                            title="Enviar presupuesto por WhatsApp"
+                          >
+                            <MessageCircle className="w-4 h-4" />
+                          </button>
+                        </>
                       )}
+
+                      <button
+                        onClick={() => handleOpenEditOrder(o)}
+                        data-testid="edit-order-btn"
+                        className="p-2 text-slate-400 hover:text-pink-600 hover:bg-pink-50 rounded-xl transition-colors"
+                        title="Editar pedido"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+
+                      <button
+                        onClick={() => onDeleteOrder(o.id)}
+                        className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl"
+                        title="Eliminar pedido"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
-
-                  {/* Actions */}
-                  <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
-                    {isPending && (
-                      <>
-                        <button
-                          onClick={() => handleDeliverAndSellOrder(o, true)}
-                          data-testid="deliver-order-btn"
-                          className="flex-1 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm flex items-center justify-center gap-1"
-                        >
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>{o.pending_balance && o.pending_balance > 0 ? `Entregar & Cobrar Saldo (${fmt(o.pending_balance)})` : 'Entregar (Ya Pagado 100%)'}</span>
-                        </button>
-                        <button
-                          onClick={() => handleShareWhatsAppBudget(o)}
-                          data-testid="order-card-wa-btn"
-                          className="p-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200"
-                          title="Enviar presupuesto por WhatsApp"
-                        >
-                          <MessageCircle className="w-4 h-4" />
-                        </button>
-                      </>
-                    )}
-
-                    {isEnLocal && (
-                      <button
-                        onClick={() => handleSettleFamilyStore(o)}
-                        className="flex-1 py-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-sm flex items-center justify-center gap-1"
-                      >
-                        <DollarSign className="w-3.5 h-3.5" />
-                        <span>Cobrar Rendición Local</span>
-                      </button>
-                    )}
-
-                    <button
-                      onClick={() => onDeleteOrder(o.id)}
-                      className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl"
-                      title="Eliminar pedido"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -1449,6 +1594,234 @@ export function ComercialTab({
         }}
         showToast={showToast}
       />
+      {/* Modal: Editar Pedido */}
+      {editingOrder && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+          <div className="glass-panel-glow rounded-3xl p-6 max-w-md w-full border border-pink-300 bg-white shadow-2xl space-y-4 animate-scale-up">
+            <div className="flex items-center justify-between border-b border-pink-100 pb-3">
+              <div className="flex items-center gap-2">
+                <Edit3 className="w-5 h-5 text-pink-500" />
+                <h3 className="font-playfair text-lg font-bold text-slate-900">Editar Pedido</h3>
+              </div>
+              <button onClick={() => setEditingOrder(null)} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditOrder} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Cliente</label>
+                <input
+                  type="text"
+                  required
+                  value={editOrderCustName}
+                  onChange={e => setEditOrderCustName(e.target.value)}
+                  className="w-full glass-input rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 bg-white border-pink-200"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Postre / Encargo</label>
+                <input
+                  type="text"
+                  required
+                  value={editOrderProdName}
+                  onChange={e => setEditOrderProdName(e.target.value)}
+                  className="w-full glass-input rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 bg-white border-pink-200"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Cantidad</label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={editOrderQty}
+                    onChange={e => setEditOrderQty(parseInt(e.target.value) || 1)}
+                    className="w-full glass-input rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white border-pink-200"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Precio Total ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={editOrderTotalPrice}
+                    onChange={e => setEditOrderTotalPrice(e.target.value)}
+                    className="w-full glass-input rounded-xl px-3 py-2 text-xs font-bold text-pink-600 bg-white border-pink-200"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Seña Abonada ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editOrderDeposit}
+                    onChange={e => setEditOrderDeposit(e.target.value)}
+                    className="w-full glass-input rounded-xl px-3 py-2 text-xs font-bold text-emerald-600 bg-white border-pink-200"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Fecha de Entrega</label>
+                  <input
+                    type="date"
+                    value={editOrderDeliveryDate}
+                    onChange={e => setEditOrderDeliveryDate(e.target.value)}
+                    className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 bg-white border-pink-200"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Notas / Detalles</label>
+                <input
+                  type="text"
+                  value={editOrderNotes}
+                  onChange={e => setEditOrderNotes(e.target.value)}
+                  className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 bg-white border-pink-200"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-pink-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingOrder(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:bg-slate-100"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-bold text-xs shadow-md shadow-pink-500/20"
+                >
+                  Guardar Cambios
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Editar Venta */}
+      {editingSale && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+          <div className="glass-panel-glow rounded-3xl p-6 max-w-md w-full border border-pink-300 bg-white shadow-2xl space-y-4 animate-scale-up">
+            <div className="flex items-center justify-between border-b border-pink-100 pb-3">
+              <div className="flex items-center gap-2">
+                <Edit3 className="w-5 h-5 text-emerald-600" />
+                <h3 className="font-playfair text-lg font-bold text-slate-900">Editar Venta</h3>
+              </div>
+              <button onClick={() => setEditingSale(null)} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditSale} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Cliente</label>
+                <input
+                  type="text"
+                  required
+                  value={editSaleCustName}
+                  onChange={e => setEditSaleCustName(e.target.value)}
+                  className="w-full glass-input rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 bg-white border-pink-200"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Producto</label>
+                <input
+                  type="text"
+                  required
+                  value={editSaleProdName}
+                  onChange={e => setEditSaleProdName(e.target.value)}
+                  className="w-full glass-input rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 bg-white border-pink-200"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Cantidad</label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={editSaleQty}
+                    onChange={e => setEditSaleQty(parseInt(e.target.value) || 1)}
+                    className="w-full glass-input rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white border-pink-200"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Monto Venta ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={editSaleRevenue}
+                    onChange={e => setEditSaleRevenue(e.target.value)}
+                    className="w-full glass-input rounded-xl px-3 py-2 text-xs font-bold text-slate-900 bg-white border-pink-200"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Costo ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editSaleCost}
+                    onChange={e => setEditSaleCost(e.target.value)}
+                    className="w-full glass-input rounded-xl px-3 py-2 text-xs font-bold text-rose-500 bg-white border-pink-200"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Fecha</label>
+                  <input
+                    type="date"
+                    value={editSaleDate}
+                    onChange={e => setEditSaleDate(e.target.value)}
+                    className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 bg-white border-pink-200"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Estado de Pago</label>
+                  <select
+                    value={editSalePaid ? 'cobrado' : 'pendiente'}
+                    onChange={e => setEditSalePaid(e.target.value === 'cobrado')}
+                    className="w-full glass-input rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white border-pink-200"
+                  >
+                    <option value="cobrado">✓ Cobrado</option>
+                    <option value="pendiente">📌 Pendiente de Cobro</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-pink-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingSale(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:bg-slate-100"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold text-xs shadow-md shadow-emerald-500/20"
+                >
+                  Guardar Cambios
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -48,6 +48,7 @@ export function ConfirmModal({
           </button>
           <button
             type="button"
+            data-testid="confirm-modal-button"
             onClick={onConfirm}
             className="flex-1 py-2.5 px-4 rounded-xl bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-bold text-xs shadow-md shadow-rose-500/20 transition-all active:scale-95"
           >

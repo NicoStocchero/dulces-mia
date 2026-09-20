@@ -50,11 +50,12 @@ test.describe('Ciclo de Vida de Pedidos, Señas y UX Táctil - E2E Testing', () 
     await submitBtn.click()
 
     // 8. Verificar que aparezca en la lista de Próximas Entregas con el cliente correspondiente
-    const deliverBtn = page.getByRole('button', { name: /✓ Cobrar/i }).first()
-    await expect(deliverBtn).toBeVisible({ timeout: 10000 })
-    await expect(page.locator('span', { hasText: testCustName }).first()).toBeVisible()
+    const orderItem = page.locator('[data-testid="pending-order-item"]', { hasText: testCustName }).first()
+    await expect(orderItem).toBeVisible({ timeout: 10000 })
+    await expect(orderItem.locator('span', { hasText: testCustName }).first()).toBeVisible()
 
     // 9. Entregar y cobrar el pedido
+    const deliverBtn = orderItem.getByTestId('mini-deliver-order-btn')
     await deliverBtn.click()
 
     // 10. Verificar que el pedido ya no esté en la lista activa de Próximas Entregas

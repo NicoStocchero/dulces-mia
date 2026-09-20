@@ -15,14 +15,15 @@ import { RecetasTab } from '@/components/tabs/RecetasTab'
 import { InsumosTab } from '@/components/tabs/InsumosTab'
 import { ClientesTab } from '@/components/tabs/ClientesTab'
 import { ResumenTab } from '@/components/tabs/ResumenTab'
+import { NotasTab } from '@/components/tabs/NotasTab'
 import { VoiceAssistantModal } from '@/components/ui/VoiceAssistantModal'
 import { CommandPaletteModal } from '@/components/ui/CommandPaletteModal'
 import { UniversalScannerModal } from '@/components/ui/UniversalScannerModal'
 import { Product, Sale, Expense, Order, Recipe, IngredientMaster, InsumoHistoryItem, ActiveTab, Customer } from '@/lib/types'
 import {
   fetchProducts, saveProduct, deleteProduct,
-  fetchSales, recordSale, updateSalePaid, deleteSale,
-  fetchExpenses, recordExpense, deleteExpense,
+  fetchSales, recordSale, updateSale, updateSalePaid, deleteSale,
+  fetchExpenses, recordExpense, updateExpense, deleteExpense,
   fetchOrders, saveOrder, deleteOrder,
   fetchRecipes, saveRecipe, deleteRecipe,
   fetchMasterIngredients, saveMasterIngredient, recordInsumoPurchase, deleteMasterIngredient, deductRecipeStock,
@@ -217,6 +218,12 @@ export function MainDashboard({ initialTab = 'pedidos' }: { initialTab?: ActiveT
     showToast(paid ? '✓ Venta marcada como COBRADA' : '📌 Venta marcada como PENDIENTE')
   }
 
+  const handleUpdateSale = async (saleData: Sale) => {
+    await updateSale(saleData)
+    await loadAllData()
+    showToast('✓ Venta actualizada')
+  }
+
   const handleDeleteSale = async (id: string) => {
     requestConfirm('¿Eliminar venta?', '¿Seguro que querés eliminar esta venta del registro?', async () => {
       await deleteSale(id)
@@ -229,6 +236,12 @@ export function MainDashboard({ initialTab = 'pedidos' }: { initialTab?: ActiveT
   const handleRecordExpense = async (expenseData: Omit<Expense, 'id'>) => {
     await recordExpense(expenseData)
     await loadAllData()
+  }
+
+  const handleUpdateExpense = async (expenseData: Expense) => {
+    await updateExpense(expenseData)
+    await loadAllData()
+    showToast('✓ Gasto actualizado')
   }
 
   const handleDeleteExpense = async (id: string) => {
@@ -350,6 +363,7 @@ export function MainDashboard({ initialTab = 'pedidos' }: { initialTab?: ActiveT
                   ingredients={ingredients}
                   initialMode="pedidos"
                   onRecordSale={handleRecordSale}
+                  onUpdateSale={handleUpdateSale}
                   onToggleSalePaid={handleToggleSalePaid}
                   onDeleteSale={handleDeleteSale}
                   onSaveOrder={handleSaveOrder}
@@ -368,6 +382,7 @@ export function MainDashboard({ initialTab = 'pedidos' }: { initialTab?: ActiveT
                   ingredients={ingredients}
                   initialMode="ventas"
                   onRecordSale={handleRecordSale}
+                  onUpdateSale={handleUpdateSale}
                   onToggleSalePaid={handleToggleSalePaid}
                   onDeleteSale={handleDeleteSale}
                   onSaveOrder={handleSaveOrder}
@@ -382,6 +397,7 @@ export function MainDashboard({ initialTab = 'pedidos' }: { initialTab?: ActiveT
                   products={products}
                   ingredients={ingredients}
                   onRecordExpense={handleRecordExpense}
+                  onUpdateExpense={handleUpdateExpense}
                   onDeleteExpense={handleDeleteExpense}
                   showToast={showToast}
                 />
@@ -444,6 +460,9 @@ export function MainDashboard({ initialTab = 'pedidos' }: { initialTab?: ActiveT
                   onDeleteCustomer={handleDeleteCustomer}
                   showToast={showToast}
                 />
+              )}
+              {activeTab === 'notas' && (
+                <NotasTab showToast={showToast} />
               )}
             </>
           )}

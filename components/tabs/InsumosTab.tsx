@@ -51,6 +51,7 @@ export function InsumosTab({ ingredients, onSaveIngredient, onRecordPurchase, on
   const [purchaseCost, setPurchaseCostState] = useState('')
   const [purchaseSize, setPurchaseSizeState] = useState('')
   const [purchaseUnit, setPurchaseUnitState] = useState('g')
+  const [purchaseBrand, setPurchaseBrand] = useState('')
   const [purchaseSupplier, setPurchaseSupplier] = useState('')
   const [purchaseNotes, setPurchaseNotes] = useState('')
 
@@ -114,6 +115,7 @@ export function InsumosTab({ ingredients, onSaveIngredient, onRecordPurchase, on
     setPurchaseCostState(item.package_cost.toString())
     setPurchaseSizeState(item.package_size.toString())
     setPurchaseUnitState(item.unit || 'g')
+    setPurchaseBrand(item.brand || '')
     setPurchaseSupplier('')
     setPurchaseNotes('')
     setIsPurchaseModalOpen(true)
@@ -181,11 +183,12 @@ export function InsumosTab({ ingredients, onSaveIngredient, onRecordPurchase, on
       package_cost: costNum,
       package_size: sizeNum,
       unit: purchaseUnit,
+      brand: purchaseBrand.trim() || undefined,
       supplier: purchaseSupplier.trim(),
       notes: purchaseNotes.trim()
     })
 
-    showToast(`✓ Compra de ${selectedInsumoForPurchase.name} registrada correctamente!`)
+    showToast(`✓ Compra de ${selectedInsumoForPurchase.name} registrada: stock y gastos actualizados!`)
     setIsPurchaseModalOpen(false)
     setLoading(false)
   }
@@ -367,6 +370,8 @@ export function InsumosTab({ ingredients, onSaveIngredient, onRecordPurchase, on
             return (
               <div
                 key={item.id}
+                data-testid="insumo-card"
+                data-insumo-name={item.name}
                 className={`glass-panel p-5 rounded-3xl border transition-all duration-200 hover:shadow-md flex flex-col justify-between relative bg-white/90 ${
                   isLowStock ? 'border-amber-300 bg-amber-50/20' : 'border-pink-200/60'
                 }`}
@@ -392,7 +397,14 @@ export function InsumosTab({ ingredients, onSaveIngredient, onRecordPurchase, on
                   </div>
 
                   {/* Insumo Title */}
-                  <h3 className="font-playfair text-lg font-bold text-slate-900 mb-3">{item.name}</h3>
+                  <div className="flex items-center gap-2 mb-3 flex-wrap">
+                    <h3 className="font-playfair text-lg font-bold text-slate-900">{item.name}</h3>
+                    {item.brand && (
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-pink-100/90 text-pink-700 border border-pink-200">
+                        {item.brand}
+                      </span>
+                    )}
+                  </div>
 
                   {/* Purchase format & calculated Unit Cost Card (Dolchere Pro style) */}
                   <div className="p-3.5 rounded-2xl bg-pink-50/60 border border-pink-200/70 space-y-2 mb-3">
@@ -558,6 +570,41 @@ export function InsumosTab({ ingredients, onSaveIngredient, onRecordPurchase, on
                 )}
               </div>
 
+              {/* Stock Actual y Alerta de Stock Mínimo */}
+              <div className="grid grid-cols-2 gap-3 p-3.5 rounded-2xl bg-amber-50/50 border border-amber-200/70">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1">
+                    <Package className="w-3.5 h-3.5 text-pink-500" />
+                    <span>Stock Actual ({unit})</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    data-testid="input-stock-qty"
+                    placeholder="1000"
+                    value={stockQty}
+                    onChange={e => setStockQty(e.target.value)}
+                    className="w-full glass-input rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white border-pink-200"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Alerta Mínima ({unit})</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    data-testid="input-min-stock"
+                    placeholder="200"
+                    value={minStock}
+                    onChange={e => setMinStock(e.target.value)}
+                    className="w-full glass-input rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white border-pink-200"
+                  />
+                </div>
+              </div>
+
               {/* Submit Buttons */}
               <div className="flex items-center gap-3 pt-2">
                 <button
@@ -639,14 +686,38 @@ export function InsumosTab({ ingredients, onSaveIngredient, onRecordPurchase, on
                 </div>
               </div>
 
-              {/* Supplier & Notes */}
+              {/* Brand & Supplier */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Marca (Opcional)</label>
+                  <input
+                    type="text"
+                    placeholder="Ej: Vacalin, Serenísima..."
+                    value={purchaseBrand}
+                    onChange={e => setPurchaseBrand(e.target.value)}
+                    className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 bg-white border-pink-200"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Proveedor / Comercio</label>
+                  <input
+                    type="text"
+                    placeholder="Ej: Distribuidora Central, Coto..."
+                    value={purchaseSupplier}
+                    onChange={e => setPurchaseSupplier(e.target.value)}
+                    className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 bg-white border-pink-200"
+                  />
+                </div>
+              </div>
+
+              {/* Notes */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Proveedor / Comercio (Opcional)</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Notas / Observaciones (Opcional)</label>
                 <input
                   type="text"
-                  placeholder="Ej: Distribuidora Central, Coto, ChangoMás..."
-                  value={purchaseSupplier}
-                  onChange={e => setPurchaseSupplier(e.target.value)}
+                  placeholder="Ej: Oferta por bulto cerrado, lote nuevo..."
+                  value={purchaseNotes}
+                  onChange={e => setPurchaseNotes(e.target.value)}
                   className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 bg-white border-pink-200"
                 />
               </div>
@@ -726,8 +797,20 @@ export function InsumosTab({ ingredients, onSaveIngredient, onRecordPurchase, on
 
                       <div className="flex items-center justify-between text-[11px] text-slate-600">
                         <span>Pagado: <strong>{fmt(item.package_cost)}</strong> ({item.package_size} {item.unit})</span>
-                        {item.supplier && <span className="italic text-slate-500">vía {item.supplier}</span>}
+                        <div className="flex items-center gap-1.5">
+                          {item.brand && (
+                            <span className="px-1.5 py-0.5 rounded bg-pink-100 text-pink-700 font-semibold text-[10px]">
+                              {item.brand}
+                            </span>
+                          )}
+                          {item.supplier && <span className="italic text-slate-500">vía {item.supplier}</span>}
+                        </div>
                       </div>
+                      {item.notes && (
+                        <div className="text-[10px] text-slate-500 italic bg-white/60 px-2 py-0.5 rounded border border-pink-50">
+                          {item.notes}
+                        </div>
+                      )}
                     </div>
                   )
                 })}

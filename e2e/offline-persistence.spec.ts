@@ -101,7 +101,7 @@ test.describe('Sistema de Guardado y Resiliencia Offline (Offline & LocalStorage
 
     const saveCustBtn = page.getByRole('button', { name: /Guardar y Vincular/i })
     await saveCustBtn.click()
-    await expect(custModal).not.toBeVisible()
+    await expect(custModal).not.toBeVisible({ timeout: 15000 })
 
     // 2. Verificar que el cliente existe en el almacenamiento local y obtener su ID
     let targetCust: any

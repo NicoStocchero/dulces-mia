@@ -4,7 +4,8 @@ import React, { useState, useMemo } from 'react'
 import { Product, Expense, IngredientMaster } from '@/lib/types'
 import {
   Receipt, PlusCircle, Trash2, Package, Tag, Filter, Search,
-  Calendar, Layers, TrendingDown, TrendingUp, Info, Scale, DollarSign
+  Calendar, Layers, TrendingDown, TrendingUp, Info, Scale, DollarSign,
+  Edit3, X, Check
 } from 'lucide-react'
 
 interface GastosTabProps {
@@ -12,6 +13,7 @@ interface GastosTabProps {
   expenses: Expense[]
   ingredients?: IngredientMaster[]
   onRecordExpense: (expense: Omit<Expense, 'id'>) => Promise<void>
+  onUpdateExpense?: (expense: Expense) => Promise<void>
   onDeleteExpense: (id: string) => Promise<void>
   showToast: (msg: string) => void
 }
@@ -23,6 +25,7 @@ export function GastosTab({
   expenses,
   ingredients = [],
   onRecordExpense,
+  onUpdateExpense,
   onDeleteExpense,
   showToast
 }: GastosTabProps) {
@@ -31,6 +34,8 @@ export function GastosTab({
   const [type, setType] = useState<'Fijo' | 'Variable' | 'Insumo' | 'General'>('Insumo')
   const [relatedProduct, setRelatedProduct] = useState('')
   const [expenseDate, setExpenseDate] = useState(() => new Date().toISOString().split('T')[0])
+  const [brand, setBrand] = useState('')
+  const [expenseNotes, setExpenseNotes] = useState('')
   
   // Structured Insumo Fields
   const [selectedIngredientId, setSelectedIngredientId] = useState<string>('')
@@ -38,6 +43,22 @@ export function GastosTab({
   const [unit, setUnit] = useState<string>('g')
   const [quantityBought, setQuantityBought] = useState<string>('1')
   const [unitPrice, setUnitPrice] = useState<string>('')
+
+  // Non-Insumo Fields (Packaging, Fixed, General with Quantity support)
+  const [nonInsumoQuantity, setNonInsumoQuantity] = useState<string>('1')
+  const [nonInsumoUnitPrice, setNonInsumoUnitPrice] = useState<string>('')
+
+  // Edit Expense Modal State
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null)
+  const [editDesc, setEditDesc] = useState('')
+  const [editAmount, setEditAmount] = useState('')
+  const [editType, setEditType] = useState<Expense['type']>('Insumo')
+  const [editBrand, setEditBrand] = useState('')
+  const [editNotes, setEditNotes] = useState('')
+  const [editQuantityBought, setEditQuantityBought] = useState('1')
+  const [editUnitPrice, setEditUnitPrice] = useState('')
+  const [editDate, setEditDate] = useState('')
+  const [editRelatedProduct, setEditRelatedProduct] = useState('')
 
   // Filter and Search State
   const [searchQuery, setSearchQuery] = useState('')
@@ -55,6 +76,7 @@ export function GastosTab({
     const ing = ingredients.find(i => i.id === masterId)
     if (ing) {
       setDescription(ing.name)
+      if (ing.brand) setBrand(ing.brand)
       setUnit(ing.unit || 'g')
       const pSize = ing.package_size ? ing.package_size.toString() : '1000'
       setPackageSize(pSize)
@@ -67,7 +89,7 @@ export function GastosTab({
     }
   }
 
-  // Bidirectional calculation: quantity & unit price -> total amount
+  // Bidirectional calculation for Insumos: quantity & unit price -> total amount
   const handleQuantityChange = (qtyStr: string) => {
     setQuantityBought(qtyStr)
     const qty = parseFloat(qtyStr)
@@ -95,6 +117,80 @@ export function GastosTab({
     }
   }
 
+  // Bidirectional calculation for Non-Insumos (Packaging, Fixed, General)
+  const handleNonInsumoQtyChange = (qStr: string) => {
+    setNonInsumoQuantity(qStr)
+    const q = parseFloat(qStr)
+    const u = parseFloat(nonInsumoUnitPrice)
+    if (!isNaN(q) && q > 0 && !isNaN(u) && u > 0) {
+      setAmount((q * u).toFixed(2))
+    }
+  }
+
+  const handleNonInsumoUnitPriceChange = (uStr: string) => {
+    setNonInsumoUnitPrice(uStr)
+    const u = parseFloat(uStr)
+    const q = parseFloat(nonInsumoQuantity) || 1
+    if (!isNaN(u) && !isNaN(q) && q > 0) {
+      setAmount((u * q).toFixed(2))
+    }
+  }
+
+  const handleNonInsumoAmountChange = (totStr: string) => {
+    setAmount(totStr)
+    const tot = parseFloat(totStr)
+    const q = parseFloat(nonInsumoQuantity) || 1
+    if (!isNaN(tot) && tot > 0 && !isNaN(q) && q > 0) {
+      setNonInsumoUnitPrice((tot / q).toFixed(2))
+    }
+  }
+
+  // Edit Expense Handlers
+  const handleOpenEditExpense = (exp: Expense) => {
+    setEditingExpense(exp)
+    setEditDesc(exp.description)
+    setEditAmount(exp.amount ? exp.amount.toString() : '')
+    setEditType(exp.type || 'Insumo')
+    setEditBrand(exp.brand || '')
+    setEditNotes(exp.notes || '')
+    setEditQuantityBought(exp.quantity_bought ? exp.quantity_bought.toString() : '1')
+    setEditUnitPrice(exp.unit_price ? exp.unit_price.toString() : '')
+    setEditDate(exp.date ? exp.date.split('T')[0] : '')
+    setEditRelatedProduct(exp.related_product || '')
+  }
+
+  const handleSaveEditExpense = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingExpense) return
+    const parsedAmount = parseFloat(editAmount) || 0
+    const parsedQty = parseFloat(editQuantityBought) || 1
+    const parsedUPrice = parseFloat(editUnitPrice) || (parsedAmount / parsedQty)
+    const selectedDateTime = editDate ? new Date(editDate + 'T12:00:00').toISOString() : editingExpense.date
+
+    const updatedExpense: Expense = {
+      ...editingExpense,
+      description: editDesc.trim(),
+      amount: parsedAmount,
+      type: editType,
+      brand: editBrand.trim() || undefined,
+      notes: editNotes.trim() || undefined,
+      quantity_bought: parsedQty,
+      unit_price: parsedUPrice,
+      related_product: editType === 'Insumo' ? '' : (editRelatedProduct || ''),
+      date: selectedDateTime
+    }
+
+    if (onUpdateExpense) {
+      await onUpdateExpense(updatedExpense)
+    } else {
+      await onDeleteExpense(editingExpense.id)
+      await onRecordExpense(updatedExpense)
+      showToast('✓ Gasto actualizado')
+    }
+
+    setEditingExpense(null)
+  }
+
   const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault()
     const parsedAmount = parseFloat(amount)
@@ -112,22 +208,25 @@ export function GastosTab({
     setLoading(true)
     const selectedDateTime = expenseDate ? new Date(expenseDate + 'T12:00:00').toISOString() : new Date().toISOString()
 
-    const parsedQty = parseFloat(quantityBought) || 1
-    const parsedPkgSize = parseFloat(packageSize) || undefined
-    const parsedUPrice = parseFloat(unitPrice) || (parsedAmount / parsedQty)
+    const parsedQty = type === 'Insumo' ? (parseFloat(quantityBought) || 1) : (parseFloat(nonInsumoQuantity) || 1)
+    const parsedPkgSize = type === 'Insumo' ? (parseFloat(packageSize) || undefined) : undefined
+    const parsedUPrice = type === 'Insumo'
+      ? (parseFloat(unitPrice) || (parsedAmount / parsedQty))
+      : (parseFloat(nonInsumoUnitPrice) || (parsedAmount / parsedQty))
 
     await onRecordExpense({
       description: finalDesc,
       amount: parsedAmount,
       type,
-      // For Insumo: explicitly unlinked from specific dessert
       related_product: type === 'Insumo' ? '' : (relatedProduct || ''),
       date: selectedDateTime,
       ingredient_id: type === 'Insumo' && selectedIngredientId ? selectedIngredientId : undefined,
-      package_size: type === 'Insumo' ? parsedPkgSize : undefined,
+      brand: type === 'Insumo' ? (brand.trim() || undefined) : undefined,
+      notes: expenseNotes.trim() || undefined,
+      package_size: parsedPkgSize,
       unit: type === 'Insumo' ? unit : undefined,
-      quantity_bought: type === 'Insumo' ? parsedQty : undefined,
-      unit_price: type === 'Insumo' ? parsedUPrice : undefined
+      quantity_bought: parsedQty,
+      unit_price: parsedUPrice
     })
 
     if (type === 'Insumo') {
@@ -141,6 +240,10 @@ export function GastosTab({
     setAmount('')
     setUnitPrice('')
     setQuantityBought('1')
+    setNonInsumoQuantity('1')
+    setNonInsumoUnitPrice('')
+    setBrand('')
+    setExpenseNotes('')
     setSelectedIngredientId('')
     setRelatedProduct('')
     setExpenseDate(new Date().toISOString().split('T')[0])
@@ -332,6 +435,7 @@ export function GastosTab({
                     </label>
                     <input
                       type="text"
+                      data-testid="input-expense-description"
                       placeholder="Ej: Harina 0000, Dulce de Leche Repostero..."
                       value={description}
                       onChange={e => {
@@ -340,6 +444,35 @@ export function GastosTab({
                       }}
                       className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 bg-white"
                       required
+                    />
+                  </div>
+                </div>
+
+                {/* Brand & Optional Notes for Insumo */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Marca <span className="text-slate-400 font-normal">(Opcional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ej: Vacalin, La Serenísima, Pureza, Chango..."
+                      value={brand}
+                      onChange={e => setBrand(e.target.value)}
+                      className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Descripción / Notas <span className="text-slate-400 font-normal">(Opcional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ej: Comprado en Coto, oferta x2, pote plástico..."
+                      value={expenseNotes}
+                      onChange={e => setExpenseNotes(e.target.value)}
+                      className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 bg-white"
                     />
                   </div>
                 </div>
@@ -353,6 +486,7 @@ export function GastosTab({
                     <input
                       type="number"
                       step="any"
+                      data-testid="input-expense-package-size"
                       placeholder="Ej: 1000, 25, 1"
                       value={packageSize}
                       onChange={e => setPackageSize(e.target.value)}
@@ -366,6 +500,7 @@ export function GastosTab({
                     </label>
                     <select
                       value={unit}
+                      data-testid="select-expense-unit"
                       onChange={e => setUnit(e.target.value)}
                       className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 bg-white"
                     >
@@ -420,6 +555,7 @@ export function GastosTab({
                     <input
                       type="number"
                       step="0.01"
+                      data-testid="input-expense-amount"
                       placeholder="0.00"
                       value={amount}
                       onChange={e => handleTotalAmountChange(e.target.value)}
@@ -430,10 +566,12 @@ export function GastosTab({
                 </div>
               </div>
             ) : (
-              /* NON-INSUMO FORM (Variable, Fijo, General) */
+              /* NON-INSUMO FORM (Variable, Fijo, General with Quantity & Unit Price) */
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Descripción</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Descripción / Concepto <span className="text-rose-500">*</span>
+                  </label>
                   <input
                     type="text"
                     placeholder="Ej: Cajas para tartas 26cm, Luz del taller, Cinta de embalar..."
@@ -444,20 +582,54 @@ export function GastosTab({
                   />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Monto ($)</label>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Cantidad <span className="text-slate-400 font-normal">(Unidades/Lotes)</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="any"
+                      placeholder="1"
+                      value={nonInsumoQuantity}
+                      onChange={e => handleNonInsumoQtyChange(e.target.value)}
+                      className="w-full glass-input rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Precio Unitario ($) <span className="text-slate-400 font-normal">(c/u)</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={nonInsumoUnitPrice}
+                      onChange={e => handleNonInsumoUnitPriceChange(e.target.value)}
+                      className="w-full glass-input rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                      <span className="font-bold text-slate-800">Monto Total ($)</span>
+                      <span className="text-[10px] text-pink-600 font-medium">Auto</span>
+                    </label>
                     <input
                       type="number"
                       step="0.01"
                       placeholder="0.00"
                       value={amount}
-                      onChange={e => setAmount(e.target.value)}
-                      className="w-full glass-input rounded-xl px-4 py-2 text-base font-bold text-slate-800"
+                      onChange={e => handleNonInsumoAmountChange(e.target.value)}
+                      className="w-full glass-input rounded-xl px-4 py-2 text-base font-bold text-slate-800 bg-white border-pink-300"
                       required
                     />
                   </div>
+                </div>
 
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {/* Related Product (Optional only for packaging / specific variables) */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -475,6 +647,19 @@ export function GastosTab({
                         </option>
                       ))}
                     </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Notas / Proveedor <span className="text-slate-400 font-normal">(Opcional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ej: Comprado en distribuidora packaging..."
+                      value={expenseNotes}
+                      onChange={e => setExpenseNotes(e.target.value)}
+                      className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 bg-white"
+                    />
                   </div>
                 </div>
               </div>
@@ -497,6 +682,7 @@ export function GastosTab({
             {/* Submit */}
             <button
               type="submit"
+              data-testid="submit-expense-btn"
               disabled={loading || !description.trim() || !amount}
               className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 to-pink-600 text-white font-bold text-sm shadow-md shadow-rose-500/25 transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2 border border-rose-300/40 active:scale-[0.99]"
             >
@@ -732,7 +918,19 @@ export function GastosTab({
                         </span>
                       </td>
                       <td className="py-3.5 px-3 font-semibold text-slate-800">
-                        {e.description}
+                        <div className="flex items-center gap-1.5">
+                          <span>{e.description}</span>
+                          {e.brand && (
+                            <span className="px-1.5 py-0.5 rounded-md bg-pink-100/70 text-pink-700 text-[10px] font-bold border border-pink-200">
+                              {e.brand}
+                            </span>
+                          )}
+                        </div>
+                        {e.notes && (
+                          <span className="block text-[10px] text-slate-500 italic pt-0.5">
+                            {e.notes}
+                          </span>
+                        )}
                         {!isInsumo && e.related_product && (
                           <span className="block text-[10px] text-slate-400 font-normal">
                             Para: {e.related_product}
@@ -752,22 +950,33 @@ export function GastosTab({
                         )}
                       </td>
                       <td className="py-3.5 px-3 font-medium text-slate-700">
-                        {isInsumo ? (e.quantity_bought ? `${e.quantity_bought} un` : '1 un') : '-'}
+                        {e.quantity_bought ? `${e.quantity_bought} un` : '1 un'}
                       </td>
                       <td className="py-3.5 px-3 text-right font-mono text-slate-600">
-                        {isInsumo && e.unit_price ? fmt(e.unit_price) : '-'}
+                        {e.unit_price ? fmt(e.unit_price) : '-'}
                       </td>
                       <td className="py-3.5 px-3 text-right font-black text-rose-600">
                         {fmt(e.amount)}
                       </td>
                       <td className="py-3.5 px-3 text-center">
-                        <button
-                          onClick={() => onDeleteExpense(e.id)}
-                          className="p-1.5 rounded-lg hover:bg-rose-100 text-slate-400 hover:text-rose-600 transition-colors"
-                          title="Eliminar gasto"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => handleOpenEditExpense(e)}
+                            data-testid="edit-expense-btn"
+                            className="p-1.5 rounded-lg hover:bg-pink-100 text-slate-400 hover:text-pink-600 transition-colors"
+                            title="Editar gasto"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => onDeleteExpense(e.id)}
+                            data-testid="delete-expense-btn"
+                            className="p-1.5 rounded-lg hover:bg-rose-100 text-slate-400 hover:text-rose-600 transition-colors"
+                            title="Eliminar gasto"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )
@@ -777,6 +986,135 @@ export function GastosTab({
           </div>
         )}
       </div>
+
+      {/* Modal: Editar Gasto */}
+      {editingExpense && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+          <div className="glass-panel-glow rounded-3xl p-6 max-w-md w-full border border-pink-300 bg-white shadow-2xl space-y-4 animate-scale-up">
+            <div className="flex items-center justify-between border-b border-pink-100 pb-3">
+              <div className="flex items-center gap-2">
+                <Edit3 className="w-5 h-5 text-rose-500" />
+                <h3 className="font-playfair text-lg font-bold text-slate-900">Editar Gasto</h3>
+              </div>
+              <button onClick={() => setEditingExpense(null)} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditExpense} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Descripción / Insumo</label>
+                <input
+                  type="text"
+                  required
+                  value={editDesc}
+                  onChange={e => setEditDesc(e.target.value)}
+                  className="w-full glass-input rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 bg-white border-pink-200"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Categoría</label>
+                  <select
+                    value={editType}
+                    onChange={e => setEditType(e.target.value as any)}
+                    className="w-full glass-input rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 bg-white border-pink-200"
+                  >
+                    <option value="Insumo">Insumo</option>
+                    <option value="Variable">Variable / Envase</option>
+                    <option value="Fijo">Fijo</option>
+                    <option value="General">General</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Marca (Opcional)</label>
+                  <input
+                    type="text"
+                    placeholder="Ej: Vacalin..."
+                    value={editBrand}
+                    onChange={e => setEditBrand(e.target.value)}
+                    className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 bg-white border-pink-200"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Cantidad</label>
+                  <input
+                    type="number"
+                    min="0.01"
+                    step="any"
+                    required
+                    value={editQuantityBought}
+                    onChange={e => setEditQuantityBought(e.target.value)}
+                    className="w-full glass-input rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white border-pink-200"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Precio Unit. ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editUnitPrice}
+                    onChange={e => setEditUnitPrice(e.target.value)}
+                    className="w-full glass-input rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white border-pink-200"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Total ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={editAmount}
+                    onChange={e => setEditAmount(e.target.value)}
+                    className="w-full glass-input rounded-xl px-3 py-2 text-xs font-bold text-rose-600 bg-white border-rose-300"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Fecha</label>
+                  <input
+                    type="date"
+                    value={editDate}
+                    onChange={e => setEditDate(e.target.value)}
+                    className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 bg-white border-pink-200"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Notas / Proveedor</label>
+                  <input
+                    type="text"
+                    value={editNotes}
+                    onChange={e => setEditNotes(e.target.value)}
+                    className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 bg-white border-pink-200"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-pink-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingExpense(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:bg-slate-100"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-bold text-xs shadow-md shadow-rose-500/20"
+                >
+                  Guardar Cambios
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

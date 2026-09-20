@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { Product, Sale, Expense, Order, Recipe, IngredientMaster, InsumoHistoryItem, Customer, RecipeCostSnapshot } from './types'
+import { normalizeText, normalizeUnit, convertUnitQuantity } from './costCalculations'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
@@ -14,6 +15,13 @@ export const isSupabaseConfigured = () => !!supabase
 function isValidUUID(str?: string): boolean {
   if (!str) return false
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
+}
+
+// Helper to detect offline or network connectivity failures to avoid futile retries
+function isNetworkError(err: any): boolean {
+  if (!err) return false
+  const msg = (err.message || String(err)).toLowerCase()
+  return msg.includes('fetch') || msg.includes('network') || msg.includes('abort') || msg.includes('failed') || (typeof navigator !== 'undefined' && !navigator.onLine)
 }
 
 // Storage fallback keys
@@ -153,7 +161,7 @@ export async function saveProduct(product: Omit<Product, 'id'> & { id?: string }
     let resData: Product | null = null
     if (product.id && isValidUUID(product.id)) {
       let { data, error } = await supabase.from('products').update(fullPayload).eq('id', product.id).select().single()
-      if (error) {
+      if (error && !isNetworkError(error)) {
         // Fallback to cleanPayload if schema cache lacks image_url/description columns
         const retry = await supabase.from('products').update(cleanPayload).eq('id', product.id).select().single()
         data = retry.data
@@ -166,7 +174,7 @@ export async function saveProduct(product: Omit<Product, 'id'> & { id?: string }
       }
     } else {
       let { data, error } = await supabase.from('products').insert([fullPayload]).select().single()
-      if (error) {
+      if (error && !isNetworkError(error)) {
         // Fallback to cleanPayload if schema cache lacks image_url/description columns
         const retry = await supabase.from('products').insert([cleanPayload]).select().single()
         data = retry.data
@@ -276,7 +284,7 @@ export async function recordSale(saleData: Omit<Sale, 'id'>): Promise<Sale | nul
 
   if (supabase) {
     let { data, error } = await supabase.from('sales').insert([fullPayload]).select().single()
-    if (error) {
+    if (error && !isNetworkError(error)) {
       const retry = await supabase.from('sales').insert([standardPayload]).select().single()
       data = retry.data
       error = retry.error
@@ -304,7 +312,7 @@ export async function updateSalePaid(id: string, paid: boolean, paid_at?: string
   const paidAtTime = paid ? (paid_at || new Date().toISOString()) : null
   if (supabase && isValidUUID(id)) {
     let { error } = await supabase.from('sales').update({ paid, paid_at: paidAtTime }).eq('id', id)
-    if (error) {
+    if (error && !isNetworkError(error)) {
       const retry = await supabase.from('sales').update({ paid }).eq('id', id)
       error = retry.error
     }
@@ -314,6 +322,49 @@ export async function updateSalePaid(id: string, paid: boolean, paid_at?: string
   const list = getLocal<Sale[]>(KEYS.SALES, [])
   setLocal(KEYS.SALES, list.map(s => s.id === id ? { ...s, paid, paid_at: paidAtTime || undefined } : s))
   return true
+}
+
+export async function updateSale(saleData: Sale): Promise<Sale | null> {
+  const fullPayload = {
+    product_id: (saleData.product_id && isValidUUID(saleData.product_id)) ? saleData.product_id : null,
+    product_name: saleData.product_name,
+    customer_id: (saleData.customer_id && isValidUUID(saleData.customer_id)) ? saleData.customer_id : null,
+    customer_name: saleData.customer_name || 'Consumidor Final',
+    quantity: saleData.quantity,
+    revenue: saleData.revenue,
+    cost: saleData.cost,
+    profit: saleData.profit,
+    paid: saleData.paid ?? true,
+    paid_at: saleData.paid ? (saleData.paid_at || new Date().toISOString()) : null,
+    date: saleData.date || new Date().toISOString()
+  }
+
+  const standardPayload = {
+    product_name: saleData.product_name,
+    quantity: saleData.quantity,
+    revenue: saleData.revenue,
+    cost: saleData.cost,
+    profit: saleData.profit,
+    paid: saleData.paid ?? true,
+    date: saleData.date || new Date().toISOString()
+  }
+
+  let updatedSale: Sale | null = null
+  if (supabase && isValidUUID(saleData.id)) {
+    let { data, error } = await supabase.from('sales').update(fullPayload).eq('id', saleData.id).select().single()
+    if (error && !isNetworkError(error)) {
+      const retry = await supabase.from('sales').update(standardPayload).eq('id', saleData.id).select().single()
+      data = retry.data
+      error = retry.error
+    }
+    if (!error && data) updatedSale = data as Sale
+    else if (error) console.error('Supabase updateSale error:', error)
+  }
+
+  const list = getLocal<Sale[]>(KEYS.SALES, [])
+  const fallback = { ...saleData, ...fullPayload } as Sale
+  setLocal(KEYS.SALES, list.map(s => s.id === saleData.id ? fallback : s))
+  return updatedSale || fallback
 }
 
 export async function deleteSale(id: string): Promise<boolean> {
@@ -345,17 +396,20 @@ export async function autoSyncExpenseWithIngredients(expense: {
   amount: number
   type: string
   ingredient_id?: string
+  brand?: string
+  notes?: string
   package_size?: number
   unit?: string
   quantity_bought?: number
   unit_price?: number
+  date?: string
 }) {
   try {
     const isIngredientType = expense.type === 'Insumo'
-    const descLower = (expense.description || '').toLowerCase()
+    const descNorm = normalizeText(expense.description || '')
     
-    const keywords = ['harina', 'azucar', 'azúcar', 'manteca', 'dulce de leche', 'oreo', 'queso crema', 'crema', 'chocolate', 'cacao', 'chips', 'insumo', 'materia prima', 'leche', 'huevos', 'frutilla', 'frambuesa', 'molde']
-    const hasKeyword = keywords.some(k => descLower.includes(k))
+    const keywords = ['harina', 'azucar', 'manteca', 'dulce de leche', 'oreo', 'queso crema', 'crema', 'chocolate', 'cacao', 'chips', 'insumo', 'materia prima', 'leche', 'huevos', 'frutilla', 'frambuesa', 'molde', 'granas', 'nuez', 'perlas']
+    const hasKeyword = keywords.some(k => descNorm.includes(k))
 
     if (!isIngredientType && !hasKeyword) return
 
@@ -367,49 +421,38 @@ export async function autoSyncExpenseWithIngredients(expense: {
     }
 
     if (!match) {
+      match = currentIngredients.find(ing => normalizeText(ing.name) === descNorm)
+    }
+
+    if (!match) {
       match = currentIngredients.find(ing => {
-        const ingLower = ing.name.toLowerCase()
-        return descLower.includes(ingLower) || ingLower.includes(descLower) ||
-          (descLower.includes('harina') && ingLower.includes('harina')) ||
-          (descLower.includes('dulce de leche') && ingLower.includes('dulce de leche')) ||
-          (descLower.includes('manteca') && ingLower.includes('manteca')) ||
-          (descLower.includes('oreo') && ingLower.includes('oreo')) ||
-          (descLower.includes('queso') && ingLower.includes('queso')) ||
-          (descLower.includes('crema') && ingLower.includes('crema')) ||
-          (descLower.includes('chocolate') && ingLower.includes('chocolate')) ||
-          (descLower.includes('azucar') && ingLower.includes('azúcar')) ||
-          (descLower.includes('cacao') && ingLower.includes('cacao'))
+        const ingNorm = normalizeText(ing.name)
+        return descNorm.includes(ingNorm) || ingNorm.includes(descNorm)
       })
     }
 
     if (match) {
-      // Calculate quantity added to stock
-      let addedStock = 1000
-      if (expense.package_size && expense.quantity_bought) {
-        let size = expense.package_size
-        const expUnit = (expense.unit || match.unit || 'g').toLowerCase()
-        const targetUnit = (match.unit || 'g').toLowerCase()
+      // Calculate quantity added to stock with exact unit conversion
+      const pkgSize = expense.package_size || match.package_size || 1000
+      const expUnit = expense.unit || match.unit || 'g'
+      const qtyBought = expense.quantity_bought || 1
 
-        if (expUnit === 'kg' && targetUnit === 'g') size = size * 1000
-        if (expUnit === 'l' && targetUnit === 'ml') size = size * 1000
-
-        addedStock = size * expense.quantity_bought
-      } else if (match.package_size) {
-        addedStock = match.package_size
-      }
+      const sizeInTargetUnit = convertUnitQuantity(pkgSize, expUnit, match.unit)
+      const addedStock = sizeInTargetUnit * qtyBought
 
       const newStock = (match.stock_qty || 0) + addedStock
-      const packageCost = expense.unit_price || expense.amount || match.package_cost
+      const packageCost = expense.unit_price || (qtyBought > 0 ? expense.amount / qtyBought : expense.amount) || match.package_cost
       const packageSize = expense.package_size || match.package_size
 
       const updatedHistory: InsumoHistoryItem[] = [
         {
           id: Date.now().toString(),
-          date: new Date().toISOString().split('T')[0],
+          date: expense.date ? expense.date.split('T')[0] : new Date().toISOString().split('T')[0],
           package_cost: packageCost,
           package_size: packageSize,
-          unit: expense.unit || match.unit || 'g',
-          notes: `Compra de Insumo: "${expense.description}"`
+          unit: expUnit,
+          brand: expense.brand || match.brand || undefined,
+          notes: expense.notes || `Compra de Insumo: "${expense.description}"`
         },
         ...(match.history || [])
       ]
@@ -418,29 +461,33 @@ export async function autoSyncExpenseWithIngredients(expense: {
         ...match,
         package_cost: packageCost,
         package_size: packageSize,
-        stock_qty: newStock,
+        brand: expense.brand || match.brand,
+        stock_qty: Math.round(newStock * 100) / 100,
         history: updatedHistory
       })
     } else if (isIngredientType) {
       const pSize = expense.package_size || 1000
       const qBought = expense.quantity_bought || 1
       const totalInitialStock = pSize * qBought
+      const u = expense.unit || 'g'
 
       await saveMasterIngredient({
         name: expense.description,
         category: 'Varios',
-        unit: expense.unit || 'g',
+        unit: u,
         package_size: pSize,
         package_cost: expense.unit_price || expense.amount,
+        brand: expense.brand || undefined,
         stock_qty: totalInitialStock,
         min_stock: Math.round(totalInitialStock * 0.2),
         history: [{
           id: Date.now().toString(),
-          date: new Date().toISOString().split('T')[0],
+          date: expense.date ? expense.date.split('T')[0] : new Date().toISOString().split('T')[0],
           package_cost: expense.unit_price || expense.amount,
           package_size: pSize,
-          unit: expense.unit || 'g',
-          notes: 'Creado desde registro de Gastos'
+          unit: u,
+          brand: expense.brand || undefined,
+          notes: expense.notes || 'Creado desde registro de Gastos'
         }]
       })
     }
@@ -456,6 +503,8 @@ export async function recordExpense(expenseData: Omit<Expense, 'id'>): Promise<E
     type: expenseData.type,
     related_product: expenseData.related_product || '',
     ingredient_id: (expenseData.ingredient_id && isValidUUID(expenseData.ingredient_id)) ? expenseData.ingredient_id : null,
+    brand: expenseData.brand || null,
+    notes: expenseData.notes || null,
     package_size: expenseData.package_size || null,
     unit: expenseData.unit || null,
     quantity_bought: expenseData.quantity_bought || null,
@@ -468,6 +517,11 @@ export async function recordExpense(expenseData: Omit<Expense, 'id'>): Promise<E
     amount: expenseData.amount,
     type: expenseData.type,
     related_product: expenseData.related_product || '',
+    ingredient_id: (expenseData.ingredient_id && isValidUUID(expenseData.ingredient_id)) ? expenseData.ingredient_id : null,
+    package_size: expenseData.package_size || null,
+    unit: expenseData.unit || null,
+    quantity_bought: expenseData.quantity_bought || null,
+    unit_price: expenseData.unit_price || null,
     date: expenseData.date || new Date().toISOString()
   }
 
@@ -479,7 +533,7 @@ export async function recordExpense(expenseData: Omit<Expense, 'id'>): Promise<E
       .insert([fullPayload])
       .select()
       .single()
-    if (error) {
+    if (error && !isNetworkError(error)) {
       const retry = await supabase.from('expenses').insert([standardPayload]).select().single()
       data = retry.data
       error = retry.error
@@ -501,7 +555,97 @@ export async function recordExpense(expenseData: Omit<Expense, 'id'>): Promise<E
   return newExpense
 }
 
+export async function updateExpense(expenseData: Expense): Promise<Expense | null> {
+  const fullPayload = {
+    description: expenseData.description,
+    amount: expenseData.amount,
+    type: expenseData.type,
+    related_product: expenseData.related_product || '',
+    ingredient_id: (expenseData.ingredient_id && isValidUUID(expenseData.ingredient_id)) ? expenseData.ingredient_id : null,
+    brand: expenseData.brand || null,
+    notes: expenseData.notes || null,
+    package_size: expenseData.package_size || null,
+    unit: expenseData.unit || null,
+    quantity_bought: expenseData.quantity_bought || null,
+    unit_price: expenseData.unit_price || null,
+    date: expenseData.date || new Date().toISOString()
+  }
+
+  const standardPayload = {
+    description: expenseData.description,
+    amount: expenseData.amount,
+    type: expenseData.type,
+    related_product: expenseData.related_product || '',
+    ingredient_id: (expenseData.ingredient_id && isValidUUID(expenseData.ingredient_id)) ? expenseData.ingredient_id : null,
+    package_size: expenseData.package_size || null,
+    unit: expenseData.unit || null,
+    quantity_bought: expenseData.quantity_bought || null,
+    unit_price: expenseData.unit_price || null,
+    date: expenseData.date || new Date().toISOString()
+  }
+
+  let updatedExpense: Expense | null = null
+  if (supabase && isValidUUID(expenseData.id)) {
+    let { data, error } = await supabase.from('expenses').update(fullPayload).eq('id', expenseData.id).select().single()
+    if (error && !isNetworkError(error)) {
+      const retry = await supabase.from('expenses').update(standardPayload).eq('id', expenseData.id).select().single()
+      data = retry.data
+      error = retry.error
+    }
+    if (!error && data) updatedExpense = data as Expense
+    else if (error) console.error('Supabase updateExpense error:', error)
+  }
+
+  const list = getLocal<Expense[]>(KEYS.EXPENSES, [])
+  const fallback = { ...expenseData, ...fullPayload } as Expense
+  setLocal(KEYS.EXPENSES, list.map(e => e.id === expenseData.id ? fallback : e))
+  return updatedExpense || fallback
+}
+
 export async function deleteExpense(id: string): Promise<boolean> {
+  // 1. Fetch expense before deletion to revert added stock if it was an Insumo
+  let expenseToDelete: Expense | null = null
+  if (supabase && isValidUUID(id)) {
+    const { data } = await supabase.from('expenses').select('*').eq('id', id).maybeSingle()
+    if (data) expenseToDelete = data as Expense
+  }
+  if (!expenseToDelete) {
+    const list = getLocal<Expense[]>(KEYS.EXPENSES, [])
+    expenseToDelete = list.find(e => e.id === id) || null
+  }
+
+  if (expenseToDelete && expenseToDelete.type === 'Insumo') {
+    try {
+      const ingredients = await fetchMasterIngredients()
+      let match = expenseToDelete.ingredient_id
+        ? ingredients.find(i => i.id === expenseToDelete?.ingredient_id)
+        : null
+
+      if (!match) {
+        const descNorm = normalizeText(expenseToDelete.description || '')
+        match = ingredients.find(i => normalizeText(i.name) === descNorm || descNorm.includes(normalizeText(i.name)))
+      }
+
+      if (match) {
+        const pkgSize = expenseToDelete.package_size || match.package_size || 1000
+        const expUnit = expenseToDelete.unit || match.unit || 'g'
+        const qtyBought = expenseToDelete.quantity_bought || 1
+
+        const sizeInTargetUnit = convertUnitQuantity(pkgSize, expUnit, match.unit)
+        const revertStock = sizeInTargetUnit * qtyBought
+
+        const newStock = Math.max(0, (match.stock_qty || 0) - revertStock)
+        await saveMasterIngredient({
+          ...match,
+          stock_qty: Math.round(newStock * 100) / 100
+        })
+      }
+    } catch (e) {
+      console.error('Error revirtiendo stock al eliminar gasto:', e)
+    }
+  }
+
+  // 2. Delete expense record
   if (supabase && isValidUUID(id)) {
     const { error } = await supabase.from('expenses').delete().eq('id', id)
     if (!error) return true
@@ -722,26 +866,62 @@ export async function saveMasterIngredient(item: Omit<IngredientMaster, 'id'> & 
   }
 }
 
-export async function recordInsumoPurchase(insumoId: string, purchaseData: { date: string; package_cost: number; package_size: number; unit: string; supplier?: string; notes?: string }): Promise<boolean> {
+export async function recordInsumoPurchase(insumoId: string, purchaseData: { date: string; package_cost: number; package_size: number; unit: string; supplier?: string; brand?: string; notes?: string }): Promise<boolean> {
   const ingredients = await fetchMasterIngredients()
   const target = ingredients.find(i => i.id === insumoId)
   if (!target) return false
 
-  const newHistoryItem = {
+  const newHistoryItem: InsumoHistoryItem = {
     id: Date.now().toString(),
     ...purchaseData
   }
 
   const updatedHistory = [newHistoryItem, ...(target.history || [])]
+
+  // Calculate added stock converting units to target unit
+  const sizeInTargetUnit = convertUnitQuantity(
+    purchaseData.package_size,
+    purchaseData.unit || target.unit,
+    target.unit
+  )
+  const newStock = (target.stock_qty || 0) + sizeInTargetUnit
+
   const updatedItem: IngredientMaster = {
     ...target,
+    brand: purchaseData.brand || target.brand,
     package_cost: purchaseData.package_cost,
     package_size: purchaseData.package_size,
-    unit: purchaseData.unit,
+    stock_qty: Math.round(newStock * 100) / 100,
     history: updatedHistory
   }
 
   await saveMasterIngredient(updatedItem)
+
+  // Synchronize financial outflow into expenses table
+  const fullPayload = {
+    description: `Compra: ${target.name}`,
+    amount: purchaseData.package_cost,
+    type: 'Insumo' as const,
+    related_product: '',
+    ingredient_id: target.id,
+    brand: purchaseData.brand || null,
+    notes: purchaseData.notes || null,
+    package_size: purchaseData.package_size,
+    unit: purchaseData.unit,
+    quantity_bought: 1,
+    unit_price: purchaseData.package_cost,
+    date: purchaseData.date ? new Date(purchaseData.date + 'T12:00:00').toISOString() : new Date().toISOString()
+  }
+
+  if (supabase) {
+    const { error } = await supabase.from('expenses').insert([fullPayload])
+    if (error) console.error('Supabase expense insert error in recordInsumoPurchase:', error)
+  } else {
+    const list = getLocal<Expense[]>(KEYS.EXPENSES, [])
+    const newExpense = { ...fullPayload, id: Date.now().toString() } as Expense
+    setLocal(KEYS.EXPENSES, [newExpense, ...list])
+  }
+
   return true
 }
 
@@ -982,24 +1162,28 @@ export async function fetchCustomers(): Promise<Customer[]> {
   let list: Customer[] = []
 
   if (supabase) {
-    const { data, error } = await supabase
-      .from('customers')
-      .select('*')
-      .order('name', { ascending: true })
-    if (!error && data) {
-      list = data as Customer[]
-      
-      // Check if there are local customers that were saved offline
-      const localList = getLocal<Customer[]>('sol_postres_customers', [])
-      const missingInCloud = localList.filter(lc => !list.some(sc => sc.id === lc.id || sc.name.toLowerCase().trim() === lc.name.toLowerCase().trim()))
-      if (missingInCloud.length > 0) {
-        for (const mc of missingInCloud) {
-          saveCustomer(mc).catch(() => {})
+    try {
+      const { data, error } = await supabase
+        .from('customers')
+        .select('*')
+        .order('name', { ascending: true })
+      if (!error && data) {
+        list = data as Customer[]
+        
+        // Check if there are local customers that were saved offline
+        const localList = getLocal<Customer[]>('sol_postres_customers', [])
+        const missingInCloud = localList.filter(lc => !list.some(sc => sc.id === lc.id || sc.name.toLowerCase().trim() === lc.name.toLowerCase().trim()))
+        if (missingInCloud.length > 0) {
+          for (const mc of missingInCloud) {
+            saveCustomer(mc).catch(() => {})
+          }
+          list = [...list, ...missingInCloud]
         }
-        list = [...list, ...missingInCloud]
+      } else if (error) {
+        console.error('Supabase fetchCustomers error:', error)
       }
-    } else if (error) {
-      console.error('Supabase fetchCustomers error:', error)
+    } catch (err) {
+      console.warn('Supabase offline in fetchCustomers:', err)
     }
   }
 
@@ -1043,40 +1227,47 @@ export async function saveCustomer(customerData: Omit<Customer, 'id'> & { id?: s
   let savedId = customerData.id
 
   if (supabase) {
-    let resData: Customer | null = null
-    if (customerData.id && isValidUUID(customerData.id)) {
-      let { data, error } = await supabase.from('customers').update(fullPayload).eq('id', customerData.id).select().single()
-      if (error) {
-        const retry = await supabase.from('customers').update(cleanPayload).eq('id', customerData.id).select().single()
-        data = retry.data
-        error = retry.error
+    try {
+      let resData: Customer | null = null
+      if (customerData.id && isValidUUID(customerData.id)) {
+        let { data, error } = await supabase.from('customers').update(fullPayload).eq('id', customerData.id).select().single()
+        if (error && !isNetworkError(error)) {
+          const retry = await supabase.from('customers').update(cleanPayload).eq('id', customerData.id).select().single()
+          data = retry.data
+          error = retry.error
+        }
+        if (!error && data) resData = data as Customer
+        else if (error) console.error('Supabase customer update error:', error)
+      } else {
+        let { data, error } = await supabase.from('customers').insert([fullPayload]).select().single()
+        if (error && !isNetworkError(error)) {
+          const retry = await supabase.from('customers').insert([cleanPayload]).select().single()
+          data = retry.data
+          error = retry.error
+        }
+        if (!error && data) resData = data as Customer
+        else if (error) console.error('Supabase customer insert error:', error)
       }
-      if (!error && data) resData = data as Customer
-      else if (error) console.error('Supabase customer update error:', error)
-    } else {
-      let { data, error } = await supabase.from('customers').insert([fullPayload]).select().single()
-      if (error) {
-        const retry = await supabase.from('customers').insert([cleanPayload]).select().single()
-        data = retry.data
-        error = retry.error
-      }
-      if (!error && data) resData = data as Customer
-      else if (error) console.error('Supabase customer insert error:', error)
-    }
 
-    if (resData) {
-      savedId = resData.id
-      setCustMeta(resData.id, {
-        favorite_dessert: customerData.favorite_dessert,
-        dietary_tags: customerData.dietary_tags,
-        address_notes: customerData.address_notes
-      })
-      return {
-        ...resData,
-        favorite_dessert: customerData.favorite_dessert || resData.favorite_dessert,
-        dietary_tags: customerData.dietary_tags || [],
-        address_notes: customerData.address_notes || resData.address_notes
+      if (resData) {
+        savedId = resData.id
+        setCustMeta(resData.id, {
+          favorite_dessert: customerData.favorite_dessert,
+          dietary_tags: customerData.dietary_tags,
+          address_notes: customerData.address_notes
+        })
+        const fullCust: Customer = {
+          ...resData,
+          favorite_dessert: customerData.favorite_dessert || resData.favorite_dessert,
+          dietary_tags: customerData.dietary_tags || [],
+          address_notes: customerData.address_notes || resData.address_notes
+        }
+        const list = getLocal<Customer[]>('sol_postres_customers', [])
+        setLocal('sol_postres_customers', [fullCust, ...list.filter(c => c.id !== fullCust.id)])
+        return fullCust
       }
+    } catch (err) {
+      console.warn('Supabase offline in saveCustomer, falling back to localStorage:', err)
     }
   }
 

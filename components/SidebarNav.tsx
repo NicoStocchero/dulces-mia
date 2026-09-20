@@ -3,7 +3,7 @@
 import React, { useState } from 'react'
 import Link from 'next/link'
 import { ActiveTab } from '@/lib/types'
-import { Calendar, ShoppingBag, Receipt, Package, User, ChefHat, BarChart3, Store, ChevronLeft, ChevronRight, Cake, RefreshCw, Lock, Search } from 'lucide-react'
+import { Calendar, ShoppingBag, Receipt, Package, User, ChefHat, BarChart3, Store, ChevronLeft, ChevronRight, Cake, RefreshCw, Lock, Search, FileText } from 'lucide-react'
 
 interface SidebarNavProps {
   activeTab: ActiveTab
@@ -17,10 +17,10 @@ export function SidebarNav({ activeTab, setActiveTab, onLock, onOpenSearch, isSy
   const [isCollapsed, setIsCollapsed] = useState(false)
 
   const navItems: { id: ActiveTab; label: string; icon: React.ElementType; color: string }[] = [
-    { id: 'pedidos', label: 'Pedidos', icon: Calendar, color: 'text-pink-500' },
-    { id: 'ventas', label: 'Ventas', icon: ShoppingBag, color: 'text-emerald-500' },
+    { id: 'pedidos', label: 'Ventas & Pedidos', icon: ShoppingBag, color: 'text-pink-500' },
     { id: 'gastos', label: 'Gastos', icon: Receipt, color: 'text-rose-500' },
     { id: 'insumos', label: 'Insumos & Costos', icon: Package, color: 'text-purple-500' },
+    { id: 'notas', label: 'Bloc de Notas', icon: FileText, color: 'text-amber-500' },
     { id: 'clientes', label: 'CRM Clientes', icon: User, color: 'text-blue-500' },
     { id: 'catalogo', label: 'Catálogo Postres', icon: Store, color: 'text-amber-500' },
     { id: 'recetas', label: 'Libro de Recetas', icon: ChefHat, color: 'text-teal-500' },
@@ -79,7 +79,7 @@ export function SidebarNav({ activeTab, setActiveTab, onLock, onOpenSearch, isSy
         <nav className="space-y-1.5">
           {navItems.map(item => {
             const Icon = item.icon
-            const isActive = activeTab === item.id
+            const isActive = activeTab === item.id || (item.id === 'pedidos' && activeTab === 'ventas')
 
             return (
               <Link

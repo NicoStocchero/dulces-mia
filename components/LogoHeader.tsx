@@ -4,7 +4,7 @@ import React, { useState } from 'react'
 import Link from 'next/link'
 import { ActiveTab } from '@/lib/types'
 import {
-  Lock, ShoppingBag, Calendar, Receipt, BookOpen, ChefHat, BarChart3, Menu, X, ChevronRight, Package, User
+  Lock, ShoppingBag, Calendar, Receipt, BookOpen, ChefHat, BarChart3, Menu, X, ChevronRight, Package, User, FileText
 } from 'lucide-react'
 
 interface HeaderProps {
@@ -17,11 +17,11 @@ interface HeaderProps {
 export function LogoHeader({ activeTab, setActiveTab, onLock, isOnline = true }: HeaderProps) {
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false)
 
-  // Primary mobile tabs (Pedidos FIRST before Ventas)
+  // Primary mobile tabs (Ventas & Pedidos, Gastos, Notas, and Más)
   const primaryTabs = [
-    { id: 'pedidos' as ActiveTab, label: 'Pedidos', icon: Calendar },
-    { id: 'ventas' as ActiveTab, label: 'Ventas', icon: ShoppingBag },
+    { id: 'pedidos' as ActiveTab, label: 'Ventas & Pedidos', icon: ShoppingBag },
     { id: 'gastos' as ActiveTab, label: 'Gastos', icon: Receipt },
+    { id: 'notas' as ActiveTab, label: 'Notas', icon: FileText },
   ]
 
   // Secondary options inside "Más"
@@ -30,19 +30,8 @@ export function LogoHeader({ activeTab, setActiveTab, onLock, isOnline = true }:
     { id: 'clientes' as ActiveTab, label: 'CRM & Clientes', desc: 'Fichas, cumpleaños e historial de compras', icon: User },
     { id: 'catalogo' as ActiveTab, label: 'Catálogo de Postres', desc: 'Gestionar precios y productos', icon: BookOpen },
     { id: 'recetas' as ActiveTab, label: 'Libro de Recetas', desc: 'Ingredientes y paso a paso', icon: ChefHat },
+    { id: 'notas' as ActiveTab, label: 'Bloc de Notas', desc: 'Ideas, listas de compras y recordatorios', icon: FileText },
     { id: 'resumen' as ActiveTab, label: 'Resumen & Metas', desc: 'Estadísticas y objetivos', icon: BarChart3 },
-  ]
-
-  // Desktop header tabs (Pedidos FIRST)
-  const desktopTabs = [
-    { id: 'pedidos' as ActiveTab, label: 'Pedidos', icon: Calendar },
-    { id: 'ventas' as ActiveTab, label: 'Ventas', icon: ShoppingBag },
-    { id: 'gastos' as ActiveTab, label: 'Gastos', icon: Receipt },
-    { id: 'insumos' as ActiveTab, label: 'Insumos', icon: Package },
-    { id: 'clientes' as ActiveTab, label: 'Clientes', icon: User },
-    { id: 'catalogo' as ActiveTab, label: 'Catálogo', icon: BookOpen },
-    { id: 'recetas' as ActiveTab, label: 'Recetas', icon: ChefHat },
-    { id: 'resumen' as ActiveTab, label: 'Resumen', icon: BarChart3 },
   ]
 
   const handleSelectTab = (tab: ActiveTab) => {
@@ -59,7 +48,7 @@ export function LogoHeader({ activeTab, setActiveTab, onLock, isOnline = true }:
         <div className="grid grid-cols-4 gap-2 max-w-md mx-auto">
           {primaryTabs.map(tab => {
             const Icon = tab.icon
-            const isActive = activeTab === tab.id
+            const isActive = activeTab === tab.id || (tab.id === 'pedidos' && activeTab === 'ventas')
             return (
               <Link
                 key={tab.id}

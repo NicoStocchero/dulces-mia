@@ -1,7 +1,7 @@
 import { Recipe, IngredientMaster } from './types'
 
 // Helper to normalize strings for comparison (remove accents, lowercase, trim)
-function normalizeText(str: string): string {
+export function normalizeText(str: string): string {
   if (!str) return ''
   return str
     .toLowerCase()
@@ -11,7 +11,7 @@ function normalizeText(str: string): string {
 }
 
 // Standardize units to 'g', 'kg', 'ml', 'l', or 'u'
-function normalizeUnit(unitStr: string): 'g' | 'kg' | 'ml' | 'l' | 'u' | string {
+export function normalizeUnit(unitStr: string): 'g' | 'kg' | 'ml' | 'l' | 'u' | string {
   const u = normalizeText(unitStr)
   if (['g', 'gr', 'grs', 'gramo', 'gramos'].includes(u)) return 'g'
   if (['kg', 'kilo', 'kilos', 'kgs'].includes(u)) return 'kg'
@@ -19,6 +19,26 @@ function normalizeUnit(unitStr: string): 'g' | 'kg' | 'ml' | 'l' | 'u' | string 
   if (['l', 'lt', 'lts', 'litro', 'litros'].includes(u)) return 'l'
   if (['u', 'un', 'uni', 'unidad', 'unidades', 'huevo', 'huevos', 'paquete', 'paquetes'].includes(u)) return 'u'
   return u
+}
+
+/**
+ * Converts an amount from one unit to another (e.g., kg <-> g, l <-> ml).
+ */
+export function convertUnitQuantity(amount: number, fromUnit: string, toUnit: string): number {
+  if (!amount || isNaN(amount)) return 0
+  const from = normalizeUnit(fromUnit)
+  const to = normalizeUnit(toUnit)
+  if (from === to) return amount
+
+  // Weight: kg <-> g
+  if (from === 'kg' && to === 'g') return amount * 1000
+  if (from === 'g' && to === 'kg') return amount / 1000
+
+  // Volume: l <-> ml
+  if (from === 'l' && to === 'ml') return amount * 1000
+  if (from === 'ml' && to === 'l') return amount / 1000
+
+  return amount
 }
 
 /**

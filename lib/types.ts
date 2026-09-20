@@ -41,6 +41,8 @@ export type Expense = {
   related_product?: string
   ingredient_id?: string
   ingredient_name?: string
+  brand?: string
+  notes?: string
   package_size?: number
   unit?: string
   quantity_bought?: number
@@ -73,6 +75,7 @@ export type InsumoHistoryItem = {
   package_size: number
   unit: string
   supplier?: string
+  brand?: string
   notes?: string
 }
 
@@ -83,6 +86,7 @@ export type IngredientMaster = {
   unit: string
   package_size: number
   package_cost: number
+  brand?: string
   stock_qty?: number
   min_stock?: number
   history?: InsumoHistoryItem[]
@@ -147,11 +151,20 @@ export type Customer = {
   created_at?: string
 }
 
+export type SolNote = {
+  id: string
+  title: string
+  content: string
+  category: 'General' | 'Ideas' | 'Encargos' | 'Compras' | 'Recordatorio'
+  completed?: boolean
+  created_at: string
+}
+
 export type Setting = {
   key: string
   value: string
   updated_at?: string
 }
 
-export type ActiveTab = 'pedidos' | 'ventas' | 'gastos' | 'insumos' | 'clientes' | 'catalogo' | 'recetas' | 'resumen'
+export type ActiveTab = 'pedidos' | 'ventas' | 'gastos' | 'insumos' | 'clientes' | 'catalogo' | 'recetas' | 'resumen' | 'notas'
 
