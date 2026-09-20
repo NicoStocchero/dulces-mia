@@ -3,17 +3,16 @@
 import React, { useState } from 'react'
 import Link from 'next/link'
 import { ActiveTab } from '@/lib/types'
-import { Calendar, ShoppingBag, Receipt, Package, User, ChefHat, BarChart3, Store, ChevronLeft, ChevronRight, Cake, RefreshCw, Lock, Search, FileText } from 'lucide-react'
+import { Calendar, ShoppingBag, Receipt, Package, User, ChefHat, BarChart3, Store, ChevronLeft, ChevronRight, Lock, Search, FileText } from 'lucide-react'
 
 interface SidebarNavProps {
   activeTab: ActiveTab
   setActiveTab: (tab: ActiveTab) => void
   onLock: () => void
   onOpenSearch?: () => void
-  isSynced?: boolean
 }
 
-export function SidebarNav({ activeTab, setActiveTab, onLock, onOpenSearch, isSynced = true }: SidebarNavProps) {
+export function SidebarNav({ activeTab, setActiveTab, onLock, onOpenSearch }: SidebarNavProps) {
   const [isCollapsed, setIsCollapsed] = useState(false)
 
   const navItems: { id: ActiveTab; label: string; icon: React.ElementType; color: string }[] = [
@@ -37,13 +36,15 @@ export function SidebarNav({ activeTab, setActiveTab, onLock, onOpenSearch, isSy
         {/* Header Branding */}
         <div className="flex items-center justify-between mb-4 pb-4 border-b border-pink-100">
           <Link href="/pedidos" className="flex items-center gap-3 group">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-pink-500 to-rose-500 flex items-center justify-center text-white shadow-md shadow-pink-500/20 group-hover:scale-105 transition-transform flex-shrink-0">
-              <Cake className="w-5 h-5 text-white" />
-            </div>
+            <img
+              src="/logo.png"
+              alt="Dulces Mía"
+              className="w-10 h-10 rounded-2xl object-cover shadow-md shadow-pink-500/20 group-hover:scale-105 transition-transform flex-shrink-0 border border-pink-200"
+            />
             {!isCollapsed && (
               <div className="animate-fade-in">
                 <h1 className="font-playfair text-lg font-bold text-slate-900 leading-tight">Dulces Mía</h1>
-                <p className="text-[10px] font-bold text-pink-600 tracking-wider uppercase">SaaS Pastelería</p>
+                <p className="text-[10px] font-bold text-pink-600 tracking-wider uppercase">Pastelería Artesanal</p>
               </div>
             )}
           </Link>
@@ -58,35 +59,38 @@ export function SidebarNav({ activeTab, setActiveTab, onLock, onOpenSearch, isSy
           </button>
         </div>
 
-        {/* Quick Search Button */}
+        {/* Global Search Shortcut Trigger */}
         {onOpenSearch && (
           <button
             onClick={onOpenSearch}
-            className={`w-full mb-4 py-2.5 px-3 rounded-2xl bg-pink-50/70 hover:bg-pink-100/70 text-slate-600 border border-pink-200 text-xs font-semibold flex items-center justify-between transition-colors ${
+            className={`w-full mb-3 flex items-center gap-2.5 px-3 py-2 rounded-xl bg-pink-50/60 hover:bg-pink-100/70 border border-pink-200/60 text-slate-500 hover:text-slate-800 transition-all text-xs font-semibold group ${
               isCollapsed ? 'justify-center px-0' : ''
             }`}
-            title="Buscar función en la app (Cmd+K)"
+            title="Buscar (⌘K / Ctrl+K)"
           >
-            <span className="flex items-center gap-2">
-              <Search className="w-4 h-4 text-pink-500" />
-              {!isCollapsed && <span>Buscar función...</span>}
-            </span>
-            {!isCollapsed && <span className="text-[10px] font-bold text-slate-400 bg-white px-1.5 py-0.5 rounded border">⌘K</span>}
+            <Search className="w-4 h-4 text-pink-500 group-hover:scale-110 transition-transform flex-shrink-0" />
+            {!isCollapsed && (
+              <div className="flex items-center justify-between w-full">
+                <span>Buscar función...</span>
+                <kbd className="px-1.5 py-0.5 text-[9px] font-bold text-pink-500 bg-white border border-pink-200 rounded-md shadow-2xs">
+                  ⌘K
+                </kbd>
+              </div>
+            )}
           </button>
         )}
 
-        {/* Navigation Items List */}
-        <nav className="space-y-1.5">
+        {/* Navigation Items */}
+        <nav className="space-y-1">
           {navItems.map(item => {
             const Icon = item.icon
             const isActive = activeTab === item.id || (item.id === 'pedidos' && activeTab === 'ventas')
-
             return (
               <Link
                 key={item.id}
                 href={`/${item.id}`}
                 onClick={() => setActiveTab(item.id)}
-                className={`flex items-center gap-3 px-3.5 py-3 rounded-2xl text-xs font-bold transition-all relative group ${
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-xs font-bold transition-all relative group ${
                   isActive
                     ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-md shadow-pink-500/25 border border-pink-400'
                     : 'text-slate-600 hover:bg-pink-50/80 hover:text-slate-900 border border-transparent'
@@ -110,15 +114,8 @@ export function SidebarNav({ activeTab, setActiveTab, onLock, onOpenSearch, isSy
         </nav>
       </div>
 
-      {/* Footer Sync Status & Lock */}
-      <div className="pt-4 border-t border-pink-100 space-y-2">
-        <div className={`flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-bold ${
-          isCollapsed ? 'justify-center px-0' : ''
-        }`}>
-          <RefreshCw className="w-3.5 h-3.5 text-emerald-600 animate-spin-slow flex-shrink-0" />
-          {!isCollapsed && <span>Supabase 100% Sync</span>}
-        </div>
-
+      {/* Footer Lock */}
+      <div className="pt-4 border-t border-pink-100">
         <button
           onClick={onLock}
           className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 text-xs font-bold transition-colors shadow-2xs ${

@@ -113,7 +113,7 @@ export function PinScreen({ onSuccess }: { onSuccess: () => void }) {
         {/* Footer info */}
         <div className="mt-8 text-center text-[10px] text-slate-400 flex items-center gap-1">
           <Sparkles className="w-3 h-3 text-pink-400" />
-          <span>Dulces Mía v2.0 • Conectado a Supabase</span>
+          <span>Dulces Mía • Pastelería Artesanal</span>
         </div>
       </div>
 

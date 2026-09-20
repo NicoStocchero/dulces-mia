@@ -18,7 +18,11 @@ export const metadata: Metadata = {
   title: 'Dulces Mía — Control de Gestión & Postres Caseros',
   description: 'Sistema de gestión de ventas, productos y costos para Dulces Mía',
   icons: {
-    icon: '/favicon.ico',
+    icon: [
+      { url: '/icon.png', type: 'image/png' },
+      { url: '/favicon.ico' }
+    ],
+    apple: '/apple-icon.png',
   },
 }
 

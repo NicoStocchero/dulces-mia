@@ -10,7 +10,7 @@ export function LogoBadge({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
   return (
     <div className={`relative rounded-full overflow-hidden shadow-md border-2 border-pink-200/80 bg-white flex items-center justify-center flex-shrink-0 ${dimensions}`}>
       <img
-        src="/logo.jpg"
+        src="/logo.png"
         alt="Dulces Mía Logo"
         className="w-full h-full object-cover rounded-full"
       />

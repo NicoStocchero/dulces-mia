@@ -332,7 +332,6 @@ export function MainDashboard({ initialTab = 'pedidos' }: { initialTab?: ActiveT
         setActiveTab={setActiveTab}
         onLock={handleLockSession}
         onOpenSearch={() => setIsSearchModalOpen(true)}
-        isSynced={isSupabaseConfigured()}
       />
 
       <div className="flex-1 flex flex-col min-w-0">
@@ -341,7 +340,6 @@ export function MainDashboard({ initialTab = 'pedidos' }: { initialTab?: ActiveT
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           onLock={handleLockSession}
-          isOnline={isSupabaseConfigured()}
         />
 
         {/* Main Content Area */}
@@ -349,7 +347,7 @@ export function MainDashboard({ initialTab = 'pedidos' }: { initialTab?: ActiveT
           {loadingData && products.length === 0 ? (
             <div className="text-center py-20 text-slate-400 text-sm">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-500 mx-auto mb-3" />
-              <p>Sincronizando datos con Supabase...</p>
+              <p>Cargando información...</p>
             </div>
           ) : (
             <>
