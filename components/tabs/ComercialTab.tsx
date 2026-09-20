@@ -56,6 +56,8 @@ export function ComercialTab({
   const [customerId, setCustomerId] = useState<string>('')
   const [selectedProductId, setSelectedProductId] = useState('')
   const [customProductName, setCustomProductName] = useState('')
+  const [customPrice, setCustomPrice] = useState('')
+  const [customCost, setCustomCost] = useState('')
   const [quantity, setQuantity] = useState(1)
   const [recordDate, setRecordDate] = useState(() => new Date().toISOString().split('T')[0])
   const [deliveryDate, setDeliveryDate] = useState('')
@@ -72,6 +74,7 @@ export function ComercialTab({
   const [quickCustBirthday, setQuickCustBirthday] = useState('')
   const [quickCustNotes, setQuickCustNotes] = useState('')
   const [savingCustomer, setSavingCustomer] = useState(false)
+  const [recentCustomers, setRecentCustomers] = useState<Customer[]>([])
 
   // Filter & View State
   const [statusFilter, setStatusFilter] = useState<'Todos' | 'Pendientes' | 'En Local' | 'Cobradas' | 'Por Cobrar'>('Todos')
@@ -90,15 +93,26 @@ export function ComercialTab({
   const activeProducts = useMemo(() => products.filter(p => p.active !== false), [products])
   const selectedProduct = activeProducts.find(p => p.id === selectedProductId)
 
+  // Combined customers (props + local immediate cache)
+  const allCustomers = useMemo(() => {
+    const map = new Map<string, Customer>()
+    customers.forEach(c => map.set(c.id, c))
+    recentCustomers.forEach(c => map.set(c.id, c))
+    return Array.from(map.values())
+  }, [customers, recentCustomers])
+
   // Get selected customer object
   const selectedCustomer = useMemo(() => {
     if (!customerId) return null
-    return customers.find(c => c.id === customerId)
-  }, [customerId, customers])
+    return allCustomers.find(c => c.id === customerId || c.name === customerId)
+  }, [customerId, allCustomers])
 
   // Calculated values
-  const unitPrice = selectedProduct ? selectedProduct.price : 0
-  const unitCost = selectedProduct ? (selectedProduct.cost || 0) : 0
+  const parsedCustomPrice = parseFloat(String(customPrice).replace(',', '.')) || 0
+  const parsedCustomCost = parseFloat(String(customCost).replace(',', '.')) || 0
+
+  const unitPrice = selectedProduct ? selectedProduct.price : parsedCustomPrice
+  const unitCost = selectedProduct ? (selectedProduct.cost || 0) : parsedCustomCost
   const totalPrice = unitPrice * quantity
   const totalCost = unitCost * quantity
   const totalProfit = totalPrice - totalCost
@@ -127,11 +141,11 @@ export function ComercialTab({
       })
 
       showToast(`✨ Cliente "${quickCustName.trim()}" guardado en el CRM!`)
-      // If customer object returned with id, auto select it
+      // Auto select newly created customer immediately
       if (created && (created as Customer).id) {
+        setRecentCustomers(prev => [created as Customer, ...prev])
         setCustomerId((created as Customer).id)
       } else {
-        // Find matching customer after reload or select by name
         setCustomerId(quickCustName.trim())
       }
 
@@ -158,7 +172,17 @@ export function ComercialTab({
 
     const pName = selectedProduct ? selectedProduct.name : customProductName.trim()
     if (!pName) {
-      showToast('⚠️ Seleccioná o ingresá un postre')
+      showToast('⚠️ Seleccioná un postre o ingresá el nombre del encargo')
+      return
+    }
+
+    if (!selectedProduct && parsedCustomPrice <= 0) {
+      showToast('⚠️ Ingresá el precio acordado para este encargo a medida')
+      return
+    }
+
+    if (totalPrice <= 0) {
+      showToast('⚠️ El monto total debe ser mayor a $0')
       return
     }
 
@@ -171,6 +195,22 @@ export function ComercialTab({
       finalCustId = selectedCustomer.id
     } else if (customerId && customerId !== '__consumidor_final__') {
       finalCustName = customerId
+    }
+
+    if (formType === 'pedido' && (!finalCustId || finalCustName === 'Consumidor Final')) {
+      showToast('⚠️ Para un pedido anticipado seleccioná o creá el cliente en el CRM')
+      return
+    }
+
+    if (formType === 'pedido' && !deliveryDate) {
+      showToast('⚠️ Ingresá la fecha de entrega del pedido')
+      return
+    }
+
+    const parsedDeposit = parseFloat(String(deposit).replace(',', '.')) || 0
+    if (formType === 'pedido' && parsedDeposit > totalPrice) {
+      showToast('⚠️ La seña no puede ser mayor al precio total del pedido')
+      return
     }
 
     isSubmittingRef.current = true
@@ -216,7 +256,6 @@ export function ComercialTab({
         }
       } else {
         // Advance pre-order
-        const parsedDeposit = parseFloat(deposit) || 0
         const pendingBalance = Math.max(0, totalPrice - parsedDeposit)
         const creationDate = recordDate ? new Date(recordDate + 'T12:00:00').toISOString() : new Date().toISOString()
 
@@ -242,6 +281,8 @@ export function ComercialTab({
       // Reset input fields
       setSelectedProductId('')
       setCustomProductName('')
+      setCustomPrice('')
+      setCustomCost('')
       setQuantity(1)
       setDeposit('')
       setDeliveryDate('')
@@ -362,7 +403,22 @@ export function ComercialTab({
       (order.notes ? `💡 *Detalles:* ${order.notes}\n` : '') +
       `\n¡Muchas gracias por elegirnos! 💕`
 
-    const url = `https://wa.me/?text=${encodeURIComponent(text)}`
+    // Customer phone lookup
+    let cleanPhone = ''
+    if (order.customer_id) {
+      const cust = allCustomers.find(c => c.id === order.customer_id)
+      if (cust?.phone) {
+        cleanPhone = cust.phone.replace(/\D/g, '')
+        if (cleanPhone) {
+          cleanPhone = cleanPhone.replace(/^0+/, '').replace(/^15/, '')
+          if (!cleanPhone.startsWith('54')) {
+            cleanPhone = '549' + cleanPhone
+          }
+        }
+      }
+    }
+
+    const url = cleanPhone ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}` : `https://wa.me/?text=${encodeURIComponent(text)}`
     window.open(url, '_blank')
     showToast('💬 Abriendo WhatsApp con el presupuesto...')
   }
@@ -495,7 +551,7 @@ export function ComercialTab({
                 className="w-full glass-input rounded-xl px-3.5 py-2.5 text-xs font-semibold text-slate-800 bg-white border-pink-200"
               >
                 <option value="">-- Consumidor Final / Mostrador (Venta Rápida) --</option>
-                {customers.map(c => (
+                {allCustomers.map(c => (
                   <option key={c.id} value={c.id}>
                     👤 {c.name} {c.phone ? `(${c.phone})` : ''} {c.favorite_dessert ? `• Le gusta: ${c.favorite_dessert}` : ''}
                   </option>
@@ -539,13 +595,48 @@ export function ComercialTab({
               </select>
 
               {!selectedProductId && (
-                <input
-                  type="text"
-                  placeholder="O escribí un encargo a medida (Ej: Torta Temática Sirenita)..."
-                  value={customProductName}
-                  onChange={e => setCustomProductName(e.target.value)}
-                  className="w-full glass-input rounded-xl px-3.5 py-2 text-xs text-slate-800 bg-white mt-2 border-pink-200"
-                />
+                <div className="space-y-2 mt-2">
+                  <input
+                    type="text"
+                    data-testid="custom-product-name"
+                    placeholder="O escribí un encargo a medida (Ej: Torta Temática Sirenita)..."
+                    value={customProductName}
+                    onChange={e => setCustomProductName(e.target.value)}
+                    className="w-full glass-input rounded-xl px-3.5 py-2 text-xs text-slate-800 bg-white border-pink-200"
+                  />
+                  {customProductName.trim().length > 0 && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-2.5 rounded-xl bg-pink-50/50 border border-pink-100">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          Precio Unitario Acordado ($) *
+                        </label>
+                        <input
+                          type="text"
+                          data-testid="custom-product-price"
+                          inputMode="decimal"
+                          placeholder="Ej: 35000"
+                          value={customPrice}
+                          onChange={e => setCustomPrice(e.target.value)}
+                          className="w-full glass-input rounded-lg px-3 py-1.5 text-xs font-bold text-slate-800 bg-white border-pink-200"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          Costo Insumos Estimado ($ Opcional)
+                        </label>
+                        <input
+                          type="text"
+                          data-testid="custom-product-cost"
+                          inputMode="decimal"
+                          placeholder="Ej: 14000"
+                          value={customCost}
+                          onChange={e => setCustomCost(e.target.value)}
+                          className="w-full glass-input rounded-lg px-3 py-1.5 text-xs text-slate-800 bg-white border-pink-200"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 
@@ -576,6 +667,7 @@ export function ComercialTab({
                   </label>
                   <input
                     type="date"
+                    data-testid="delivery-date-input"
                     value={deliveryDate}
                     onChange={e => setDeliveryDate(e.target.value)}
                     className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 bg-white border-pink-200"
@@ -650,6 +742,7 @@ export function ComercialTab({
                 <div className="grid grid-cols-2 gap-3 items-center">
                   <input
                     type="number"
+                    data-testid="deposit-input"
                     placeholder="0"
                     value={deposit}
                     onChange={e => setDeposit(e.target.value)}
@@ -666,7 +759,7 @@ export function ComercialTab({
             )}
 
             {/* 5. Cost, Price & Profit Preview Box */}
-            {selectedProduct && (
+            {(selectedProduct || (customProductName.trim().length > 0 && totalPrice > 0)) && (
               <div className="p-3.5 rounded-2xl bg-pink-50/70 border border-pink-200 space-y-1.5">
                 <div className="flex items-center justify-between text-[11px] font-bold text-pink-700">
                   <span>Desglose Financiero de la Operación</span>
@@ -808,7 +901,14 @@ export function ComercialTab({
                       <span className="font-bold text-slate-900 block">{o.customer_name}</span>
                       <span className="text-[10px] text-pink-600 font-semibold">{o.quantity}x {o.product_name}</span>
                     </div>
-                    <div className="text-right">
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => handleShareWhatsAppBudget(o)}
+                        className="p-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200"
+                        title="Enviar presupuesto por WhatsApp"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5" />
+                      </button>
                       <button
                         onClick={() => handleDeliverAndSellOrder(o, true)}
                         className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] shadow-2xs"
@@ -1049,6 +1149,7 @@ export function ComercialTab({
               return (
                 <div
                   key={o.id}
+                  data-testid="order-card"
                   className={`p-5 rounded-3xl border transition-all bg-white flex flex-col justify-between ${
                     isPending ? 'border-pink-200 shadow-sm' : isEnLocal ? 'border-purple-200 bg-purple-50/20' : 'border-slate-200 opacity-75'
                   }`}
@@ -1098,6 +1199,7 @@ export function ComercialTab({
                         </button>
                         <button
                           onClick={() => handleShareWhatsAppBudget(o)}
+                          data-testid="order-card-wa-btn"
                           className="p-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200"
                           title="Enviar presupuesto por WhatsApp"
                         >
@@ -1155,6 +1257,7 @@ export function ComercialTab({
                 <input
                   type="text"
                   required
+                  data-testid="quick-cust-name"
                   placeholder="Ej: Carolina Gómez"
                   value={quickCustName}
                   onChange={e => setQuickCustName(e.target.value)}
@@ -1167,7 +1270,8 @@ export function ComercialTab({
                   <label className="block text-xs font-semibold text-slate-700 mb-1">Teléfono / WhatsApp</label>
                   <input
                     type="text"
-                    placeholder="Ej: 3514433221"
+                    data-testid="quick-cust-phone"
+                    placeholder="Ej: 11 2345-6789 o 3514433221"
                     value={quickCustPhone}
                     onChange={e => setQuickCustPhone(e.target.value)}
                     className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 bg-white border-pink-200"

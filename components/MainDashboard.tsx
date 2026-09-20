@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { LogoHeader } from '@/components/LogoHeader'
 import { SidebarNav } from '@/components/SidebarNav'
 import { PinScreen } from '@/components/PinScreen'
@@ -90,9 +90,13 @@ export function MainDashboard({ initialTab = 'pedidos' }: { initialTab?: ActiveT
     showToast('🔒 Sesión bloqueada')
   }
 
+  const isFirstLoadRef = useRef(true)
+
   // Load all app data from Supabase / LocalStorage
   const loadAllData = useCallback(async () => {
-    setLoadingData(true)
+    if (isFirstLoadRef.current) {
+      setLoadingData(true)
+    }
     try {
       const [prodsData, salesData, expData, ordData, recData, ingData, custData, goalStr, notesStr] = await Promise.all([
         fetchProducts(),
@@ -125,6 +129,7 @@ export function MainDashboard({ initialTab = 'pedidos' }: { initialTab?: ActiveT
       console.error('Error loading data:', err)
     } finally {
       setLoadingData(false)
+      isFirstLoadRef.current = false
     }
   }, [])
 
@@ -161,7 +166,8 @@ export function MainDashboard({ initialTab = 'pedidos' }: { initialTab?: ActiveT
   // Handlers for Customers CRM
   const handleSaveCustomer = async (customerData: Omit<Customer, 'id'> & { id?: string }) => {
     const saved = await saveCustomer(customerData)
-    await loadAllData()
+    const custData = await fetchCustomers()
+    setCustomers(custData)
     showToast('✨ Cliente guardado en el CRM!')
     return saved
   }
@@ -349,7 +355,7 @@ export function MainDashboard({ initialTab = 'pedidos' }: { initialTab?: ActiveT
 
         {/* Main Content Area */}
         <main className="max-w-7xl w-full mx-auto px-4 pt-6 flex-1">
-          {loadingData ? (
+          {loadingData && products.length === 0 ? (
             <div className="text-center py-20 text-slate-400 text-sm">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-500 mx-auto mb-3" />
               <p>Sincronizando datos con Supabase...</p>
