@@ -25,7 +25,7 @@ import {
   fetchExpenses, recordExpense, deleteExpense,
   fetchOrders, saveOrder, deleteOrder,
   fetchRecipes, saveRecipe, deleteRecipe,
-  fetchMasterIngredients, saveMasterIngredient, recordInsumoPurchase, deleteMasterIngredient,
+  fetchMasterIngredients, saveMasterIngredient, recordInsumoPurchase, deleteMasterIngredient, deductRecipeStock,
   fetchCustomers, saveCustomer, deleteCustomer,
   fetchSetting, saveSetting, isSupabaseConfigured
 } from '@/lib/supabase'
@@ -202,31 +202,9 @@ export function MainDashboard({ initialTab = 'pedidos' }: { initialTab?: ActiveT
     if (saleData.product_name) {
       const product = products.find(p => p.id === saleData.product_id || p.name.toLowerCase() === saleData.product_name.toLowerCase())
       const recipe = recipes.find(r => r.id === product?.recipe_id || r.title.toLowerCase() === saleData.product_name.toLowerCase())
-      if (recipe && recipe.ingredients) {
-        let servings = recipe.base_servings || 1
-        const yieldMatch = recipe.yield?.match(/(\d+)/)
-        if (yieldMatch) servings = parseInt(yieldMatch[1]) || 1
-        const mult = (saleData.quantity || 1) / servings
-
-        for (const ing of recipe.ingredients) {
-          if (!ing.name) continue
-          const match = ing.quantity.match(/^([\d.,]+)\s*([a-zA-ZáéíóúÁÉÍÓÚ\s]*)$/)
-          if (!match) continue
-          let amount = (parseFloat(match[1].replace(',', '.')) || 0) * mult
-          const unit = match[2].trim().toLowerCase() || 'g'
-
-          const master = ingredients.find(m => m.name.toLowerCase().trim() === ing.name.toLowerCase().trim())
-          if (master) {
-            if (unit === 'kg' && master.unit === 'g') amount = amount * 1000
-            if (unit === 'l' && master.unit === 'ml') amount = amount * 1000
-
-            const newStock = Math.max(0, (master.stock_qty ?? 1000) - amount)
-            await saveMasterIngredient({
-              ...master,
-              stock_qty: newStock
-            })
-          }
-        }
+      if (recipe && recipe.id) {
+        const updated = await deductRecipeStock(recipe.id, saleData.quantity || 1, recipes, ingredients)
+        setIngredients(updated)
       }
     }
 

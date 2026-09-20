@@ -764,36 +764,67 @@ export async function deductRecipeStock(
   ingredients: IngredientMaster[]
 ): Promise<IngredientMaster[]> {
   const recipe = recipes.find(r => r.id === recipeId)
-  if (!recipe || !recipe.ingredients) return ingredients
+  if (!recipe || !recipe.ingredients || recipe.ingredients.length === 0) return ingredients
+
+  let servings = Math.max(1, recipe.base_servings || 1)
+  const yieldMatch = (recipe.yield || '').match(/(\d+)/)
+  if (yieldMatch) {
+    const parsedServings = parseInt(yieldMatch[1], 10)
+    if (parsedServings > 0) servings = parsedServings
+  }
+  const mult = (quantityMultiplier || 1) / servings
 
   const updatedIngredients = [...ingredients]
 
-  recipe.ingredients.forEach(ing => {
-    if (!ing.name) return
-    const targetIdx = updatedIngredients.findIndex(m => m.name.toLowerCase().trim() === ing.name.toLowerCase().trim())
-    if (targetIdx === -1) return
+  for (const ing of recipe.ingredients) {
+    if (!ing.name) continue
+    const ingNorm = ing.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+
+    // Smart flexible search: exact first, then partial match
+    let targetIdx = updatedIngredients.findIndex(m => {
+      const mNorm = (m.name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+      return mNorm === ingNorm
+    })
+
+    if (targetIdx === -1) {
+      targetIdx = updatedIngredients.findIndex(m => {
+        const mNorm = (m.name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+        return mNorm.includes(ingNorm) || ingNorm.includes(mNorm)
+      })
+    }
+
+    if (targetIdx === -1) continue
 
     const target = updatedIngredients[targetIdx]
-    const match = ing.quantity.match(/^([\d.,]+)\s*([a-zA-ZáéíóúÁÉÍÓÚ]*)$/)
+    const match = ing.quantity.match(/^([\d.,]+)\s*([a-zA-ZáéíóúÁÉÍÓÚ\s]*)$/)
     if (match) {
       let num = parseFloat(match[1].replace(',', '.')) || 0
-      const unit = match[2].toLowerCase().trim()
+      const rawUnit = (match[2] || '').trim().toLowerCase()
+      const recipeUnit = (['g', 'gr', 'grs', 'gramo', 'gramos'].includes(rawUnit)) ? 'g' :
+                         (['kg', 'kilo', 'kilos', 'kgs'].includes(rawUnit)) ? 'kg' :
+                         (['ml', 'cc', 'cm3', 'mililitro'].includes(rawUnit)) ? 'ml' :
+                         (['l', 'lt', 'lts', 'litro', 'litros'].includes(rawUnit)) ? 'l' : 'u'
 
-      if (unit === 'kg' && target.unit === 'g') num = num * 1000
-      if (unit === 'l' && target.unit === 'ml') num = num * 1000
+      const masterUnit = (target.unit || 'g').toLowerCase().trim()
 
-      const totalDeduction = num * quantityMultiplier
+      // Convert recipe amount to master unit
+      let amountInMasterUnit = num * mult
+      if (recipeUnit === 'g' && masterUnit === 'kg') amountInMasterUnit = (num * mult) / 1000
+      else if (recipeUnit === 'kg' && masterUnit === 'g') amountInMasterUnit = (num * mult) * 1000
+      else if (recipeUnit === 'ml' && masterUnit === 'l') amountInMasterUnit = (num * mult) / 1000
+      else if (recipeUnit === 'l' && masterUnit === 'ml') amountInMasterUnit = (num * mult) * 1000
+
       const currentStock = target.stock_qty ?? target.package_size ?? 1000
-      const newStock = Math.max(0, currentStock - totalDeduction)
+      const newStock = Math.max(0, currentStock - amountInMasterUnit)
 
       updatedIngredients[targetIdx] = {
         ...target,
         stock_qty: Math.round(newStock * 100) / 100
       }
 
-      saveMasterIngredient(updatedIngredients[targetIdx])
+      await saveMasterIngredient(updatedIngredients[targetIdx])
     }
-  })
+  }
 
   return updatedIngredients
 }

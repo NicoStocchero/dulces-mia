@@ -238,11 +238,6 @@ export function ComercialTab({
           date: dateISO
         })
 
-        // Auto deduct recipe stock if linked
-        if (selectedProduct?.recipe_id) {
-          await deductRecipeStock(selectedProduct.recipe_id, quantity, recipes, propIngredients)
-        }
-
         if (isDirectPaid) {
           confetti({
             particleCount: 45,
@@ -324,11 +319,6 @@ export function ComercialTab({
       ...order,
       status: 'Entregado'
     })
-
-    // 3. Deduct ingredient stock if linked
-    if (p?.recipe_id) {
-      await deductRecipeStock(p.recipe_id, order.quantity, recipes, propIngredients)
-    }
 
     if (isPaid) {
       confetti({
@@ -911,9 +901,10 @@ export function ComercialTab({
                       </button>
                       <button
                         onClick={() => handleDeliverAndSellOrder(o, true)}
+                        data-testid="mini-deliver-order-btn"
                         className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] shadow-2xs"
                       >
-                        ✓ Entregar & Cobrar
+                        ✓ {o.pending_balance && o.pending_balance > 0 ? `Cobrar ${fmt(o.pending_balance)}` : 'Entregar'}
                       </button>
                     </div>
                   </div>
@@ -1192,10 +1183,11 @@ export function ComercialTab({
                       <>
                         <button
                           onClick={() => handleDeliverAndSellOrder(o, true)}
+                          data-testid="deliver-order-btn"
                           className="flex-1 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm flex items-center justify-center gap-1"
                         >
                           <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>Entregar & Cobrar</span>
+                          <span>{o.pending_balance && o.pending_balance > 0 ? `Entregar & Cobrar Saldo (${fmt(o.pending_balance)})` : 'Entregar (Ya Pagado 100%)'}</span>
                         </button>
                         <button
                           onClick={() => handleShareWhatsAppBudget(o)}
