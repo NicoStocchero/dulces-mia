@@ -60,6 +60,12 @@ export function calculateRecipeCost(
   ingredients.forEach(ing => {
     if (!ing || !ing.name) return
 
+    // 0. If user specifically configured or locked a cost_override for this ingredient in this recipe:
+    if (typeof ing.cost_override === 'number' && !isNaN(ing.cost_override) && ing.cost_override >= 0) {
+      totalCost += ing.cost_override
+      return
+    }
+
     const ingNormName = normalizeText(ing.name)
 
     // 1. Smart matching: exact match first, then partial/substring match
@@ -76,7 +82,7 @@ export function calculateRecipeCost(
       )
     }
 
-    // Parse quantity number & unit from string like "350g", "130 gr", "1.5 kg", "1 unidad"
+    // Parse quantity number & unit from string like "350g", "130 gr", "1.5 kg", "1 unidad", "40"
     const match = (ing.quantity || '').toString().match(/^([\d.,]+)\s*([a-zA-ZáéíóúÁÉÍÓÚ\s]*)$/)
     if (match) {
       let num = parseFloat(match[1].replace(',', '.'))
@@ -93,13 +99,10 @@ export function calculateRecipeCost(
         let costPerBaseUnit = 0
 
         if (masterUnit === 'kg') {
-          // pkgSize in kg -> total grams = pkgSize * 1000
           costPerBaseUnit = pkgCost / (pkgSize * 1000)
         } else if (masterUnit === 'l') {
-          // pkgSize in L -> total ml = pkgSize * 1000
           costPerBaseUnit = pkgCost / (pkgSize * 1000)
         } else {
-          // master in g, ml, or u
           costPerBaseUnit = pkgCost / pkgSize
         }
 
@@ -152,3 +155,89 @@ export function calculateRecipeCost(
     servings
   }
 }
+
+/**
+ * Calculates the individual cost and matching master price for a single recipe ingredient,
+ * taking into account cost_override if set.
+ */
+export function calculateSingleIngredientCost(
+  ing: { name: string; quantity: string; cost_override?: number },
+  masterIngredients: IngredientMaster[] = []
+): {
+  cost: number
+  calculatedCost: number
+  isOverride: boolean
+  matchedMaster?: IngredientMaster
+  costPerUnitText?: string
+} {
+  if (!ing || !ing.name) {
+    return { cost: 0, calculatedCost: 0, isOverride: false }
+  }
+
+  const ingNormName = normalizeText(ing.name)
+
+  let master = masterIngredients.find(
+    m => m && m.name && normalizeText(m.name) === ingNormName
+  )
+
+  if (!master) {
+    master = masterIngredients.find(
+      m => m && m.name && (
+        normalizeText(m.name).includes(ingNormName) ||
+        ingNormName.includes(normalizeText(m.name))
+      )
+    )
+  }
+
+  let calculated = 0
+  let costPerUnitText = ''
+
+  const match = (ing.quantity || '').toString().match(/^([\d.,]+)\s*([a-zA-ZáéíóúÁÉÍÓÚ\s]*)$/)
+  if (match) {
+    let num = parseFloat(match[1].replace(',', '.'))
+    if (isNaN(num) || num < 0) num = 0
+    const rawUnit = (match[2] || '').trim()
+    const recipeUnit = normalizeUnit(rawUnit)
+
+    if (master && typeof master.package_size === 'number' && master.package_size > 0) {
+      const pkgCost = Math.max(0, master.package_cost || 0)
+      const masterUnit = normalizeUnit(master.unit || 'g')
+      const pkgSize = master.package_size
+
+      let costPerBaseUnit = 0
+      if (masterUnit === 'kg') {
+        costPerBaseUnit = pkgCost / (pkgSize * 1000)
+        costPerUnitText = `$${(pkgCost / pkgSize).toFixed(0)}/kg`
+      } else if (masterUnit === 'l') {
+        costPerBaseUnit = pkgCost / (pkgSize * 1000)
+        costPerUnitText = `$${(pkgCost / pkgSize).toFixed(0)}/L`
+      } else {
+        costPerBaseUnit = pkgCost / pkgSize
+        costPerUnitText = `$${costPerBaseUnit.toFixed(2)}/${master.unit || 'u'}`
+      }
+
+      let qtyInBaseUnit = num
+      if (recipeUnit === 'kg') qtyInBaseUnit = num * 1000
+      else if (recipeUnit === 'l') qtyInBaseUnit = num * 1000
+
+      calculated = Math.round(qtyInBaseUnit * costPerBaseUnit * 100) / 100
+    } else {
+      let mult = num
+      if (recipeUnit === 'kg' || recipeUnit === 'l') mult = num * 1000
+      calculated = Math.round(mult * 2.5 * 100) / 100
+      costPerUnitText = '$2.50/g (Estimado)'
+    }
+  }
+
+  const isOverride = typeof ing.cost_override === 'number' && !isNaN(ing.cost_override) && ing.cost_override >= 0
+  const finalCost = isOverride ? ing.cost_override! : calculated
+
+  return {
+    cost: finalCost,
+    calculatedCost: calculated,
+    isOverride,
+    matchedMaster: master,
+    costPerUnitText
+  }
+}
+

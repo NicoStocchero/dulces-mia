@@ -57,6 +57,9 @@ export function GastosTab({
   const [editNotes, setEditNotes] = useState('')
   const [editQuantityBought, setEditQuantityBought] = useState('1')
   const [editUnitPrice, setEditUnitPrice] = useState('')
+  const [editPackageSize, setEditPackageSize] = useState('1000')
+  const [editUnit, setEditUnit] = useState('g')
+  const [editSelectedIngredientId, setEditSelectedIngredientId] = useState('')
   const [editDate, setEditDate] = useState('')
   const [editRelatedProduct, setEditRelatedProduct] = useState('')
 
@@ -148,15 +151,63 @@ export function GastosTab({
   // Edit Expense Handlers
   const handleOpenEditExpense = (exp: Expense) => {
     setEditingExpense(exp)
-    setEditDesc(exp.description)
+    setEditDesc(exp.description || '')
     setEditAmount(exp.amount ? exp.amount.toString() : '')
     setEditType(exp.type || 'Insumo')
     setEditBrand(exp.brand || '')
     setEditNotes(exp.notes || '')
     setEditQuantityBought(exp.quantity_bought ? exp.quantity_bought.toString() : '1')
-    setEditUnitPrice(exp.unit_price ? exp.unit_price.toString() : '')
-    setEditDate(exp.date ? exp.date.split('T')[0] : '')
+    setEditUnitPrice(exp.unit_price ? exp.unit_price.toString() : (exp.quantity_bought && exp.amount ? (exp.amount / exp.quantity_bought).toFixed(2) : ''))
+    setEditPackageSize(exp.package_size ? exp.package_size.toString() : '1000')
+    setEditUnit(exp.unit || 'g')
+    setEditSelectedIngredientId(exp.ingredient_id || '')
+    setEditDate(exp.date ? exp.date.split('T')[0] : new Date().toISOString().split('T')[0])
     setEditRelatedProduct(exp.related_product || '')
+  }
+
+  const handleEditSelectInsumoMaster = (masterId: string) => {
+    setEditSelectedIngredientId(masterId)
+    if (!masterId) return
+    const ing = ingredients.find(i => i.id === masterId)
+    if (ing) {
+      setEditDesc(ing.name)
+      if (ing.brand) setEditBrand(ing.brand)
+      setEditUnit(ing.unit || 'g')
+      const pSize = ing.package_size ? ing.package_size.toString() : '1000'
+      setEditPackageSize(pSize)
+      if (ing.package_cost) {
+        setEditUnitPrice(ing.package_cost.toString())
+        const qty = parseFloat(editQuantityBought) || 1
+        setEditAmount((ing.package_cost * qty).toFixed(2))
+      }
+    }
+  }
+
+  const handleEditQuantityChange = (qtyStr: string) => {
+    setEditQuantityBought(qtyStr)
+    const qty = parseFloat(qtyStr)
+    const uPrice = parseFloat(editUnitPrice)
+    if (!isNaN(qty) && qty > 0 && !isNaN(uPrice) && uPrice > 0) {
+      setEditAmount((qty * uPrice).toFixed(2))
+    }
+  }
+
+  const handleEditUnitPriceChange = (priceStr: string) => {
+    setEditUnitPrice(priceStr)
+    const uPrice = parseFloat(priceStr)
+    const qty = parseFloat(editQuantityBought) || 1
+    if (!isNaN(uPrice) && !isNaN(qty) && qty > 0) {
+      setEditAmount((uPrice * qty).toFixed(2))
+    }
+  }
+
+  const handleEditTotalAmountChange = (totalStr: string) => {
+    setEditAmount(totalStr)
+    const tot = parseFloat(totalStr)
+    const qty = parseFloat(editQuantityBought) || 1
+    if (!isNaN(tot) && tot > 0 && !isNaN(qty) && qty > 0) {
+      setEditUnitPrice((tot / qty).toFixed(2))
+    }
   }
 
   const handleSaveEditExpense = async (e: React.FormEvent) => {
@@ -172,10 +223,13 @@ export function GastosTab({
       description: editDesc.trim(),
       amount: parsedAmount,
       type: editType,
-      brand: editBrand.trim() || undefined,
+      brand: editType === 'Insumo' ? (editBrand.trim() || undefined) : undefined,
       notes: editNotes.trim() || undefined,
+      package_size: editType === 'Insumo' ? (parseFloat(editPackageSize) || undefined) : undefined,
+      unit: editType === 'Insumo' ? editUnit : undefined,
       quantity_bought: parsedQty,
       unit_price: parsedUPrice,
+      ingredient_id: editType === 'Insumo' && editSelectedIngredientId ? editSelectedIngredientId : undefined,
       related_product: editType === 'Insumo' ? '' : (editRelatedProduct || ''),
       date: selectedDateTime
     }
@@ -989,95 +1043,269 @@ export function GastosTab({
 
       {/* Modal: Editar Gasto */}
       {editingExpense && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
-          <div className="glass-panel-glow rounded-3xl p-6 max-w-md w-full border border-pink-300 bg-white shadow-2xl space-y-4 animate-scale-up">
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md overflow-y-auto">
+          <div className="glass-panel-glow rounded-3xl p-6 max-w-lg w-full border border-pink-300 bg-white shadow-2xl space-y-4 animate-scale-up my-6">
             <div className="flex items-center justify-between border-b border-pink-100 pb-3">
               <div className="flex items-center gap-2">
                 <Edit3 className="w-5 h-5 text-rose-500" />
-                <h3 className="font-playfair text-lg font-bold text-slate-900">Editar Gasto</h3>
+                <h3 className="font-playfair text-lg font-bold text-slate-900">Editar Gasto o Compra</h3>
               </div>
               <button onClick={() => setEditingExpense(null)} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveEditExpense} className="space-y-3">
+            <form onSubmit={handleSaveEditExpense} className="space-y-4">
+              {/* Category Selector Tabs */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Descripción / Insumo</label>
-                <input
-                  type="text"
-                  required
-                  value={editDesc}
-                  onChange={e => setEditDesc(e.target.value)}
-                  className="w-full glass-input rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 bg-white border-pink-200"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Categoría</label>
-                  <select
-                    value={editType}
-                    onChange={e => setEditType(e.target.value as any)}
-                    className="w-full glass-input rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 bg-white border-pink-200"
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Categoría de Gasto</label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditType('Insumo')}
+                    className={`py-2 px-2 rounded-xl text-[11px] font-bold transition-all flex items-center justify-center gap-1 border ${
+                      editType === 'Insumo'
+                        ? 'bg-rose-600 text-white border-rose-400 shadow-sm'
+                        : 'bg-white text-slate-600 hover:bg-rose-50 border-pink-200'
+                    }`}
                   >
-                    <option value="Insumo">Insumo</option>
-                    <option value="Variable">Variable / Envase</option>
-                    <option value="Fijo">Fijo</option>
-                    <option value="General">General</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Marca (Opcional)</label>
-                  <input
-                    type="text"
-                    placeholder="Ej: Vacalin..."
-                    value={editBrand}
-                    onChange={e => setEditBrand(e.target.value)}
-                    className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 bg-white border-pink-200"
-                  />
+                    <Package className="w-3.5 h-3.5" />
+                    <span>Insumo</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setEditType('Variable')}
+                    className={`py-2 px-2 rounded-xl text-[11px] font-bold transition-all flex items-center justify-center gap-1 border ${
+                      editType === 'Variable'
+                        ? 'bg-purple-600 text-white border-purple-400 shadow-sm'
+                        : 'bg-white text-slate-600 hover:bg-purple-50 border-pink-200'
+                    }`}
+                  >
+                    <Tag className="w-3.5 h-3.5" />
+                    <span>Variable / Envase</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setEditType('Fijo')}
+                    className={`py-2 px-2 rounded-xl text-[11px] font-bold transition-all flex items-center justify-center gap-1 border ${
+                      editType === 'Fijo'
+                        ? 'bg-indigo-600 text-white border-indigo-400 shadow-sm'
+                        : 'bg-white text-slate-600 hover:bg-indigo-50 border-pink-200'
+                    }`}
+                  >
+                    <Tag className="w-3.5 h-3.5" />
+                    <span>Gasto Fijo</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setEditType('General')}
+                    className={`py-2 px-2 rounded-xl text-[11px] font-bold transition-all flex items-center justify-center gap-1 border ${
+                      editType === 'General'
+                        ? 'bg-amber-500 text-white border-amber-400 shadow-sm'
+                        : 'bg-white text-slate-600 hover:bg-amber-50 border-pink-200'
+                    }`}
+                  >
+                    <Tag className="w-3.5 h-3.5" />
+                    <span>General</span>
+                  </button>
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Cantidad</label>
-                  <input
-                    type="number"
-                    min="0.01"
-                    step="any"
-                    required
-                    value={editQuantityBought}
-                    onChange={e => setEditQuantityBought(e.target.value)}
-                    className="w-full glass-input rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white border-pink-200"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Precio Unit. ($)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={editUnitPrice}
-                    onChange={e => setEditUnitPrice(e.target.value)}
-                    className="w-full glass-input rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white border-pink-200"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Total ($)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    required
-                    value={editAmount}
-                    onChange={e => setEditAmount(e.target.value)}
-                    className="w-full glass-input rounded-xl px-3 py-2 text-xs font-bold text-rose-600 bg-white border-rose-300"
-                  />
-                </div>
-              </div>
+              {/* INSUMO MODE */}
+              {editType === 'Insumo' ? (
+                <div className="space-y-3 p-3.5 rounded-2xl bg-rose-50/50 border border-rose-200/70">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Insumo Catálogo
+                      </label>
+                      <select
+                        value={editSelectedIngredientId}
+                        onChange={e => handleEditSelectInsumoMaster(e.target.value)}
+                        className="w-full glass-input rounded-xl px-2.5 py-1.5 text-xs text-slate-800 bg-white border-pink-200"
+                      >
+                        <option value="">-- Personalizado / Sin catálogo --</option>
+                        {ingredients.map(ing => (
+                          <option key={ing.id} value={ing.id}>
+                            {ing.name} ({ing.package_size || 1000}{ing.unit || 'g'})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-              <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Nombre del Insumo <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={editDesc}
+                        onChange={e => setEditDesc(e.target.value)}
+                        className="w-full glass-input rounded-xl px-2.5 py-1.5 text-xs text-slate-800 bg-white border-pink-200"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">Marca</label>
+                      <input
+                        type="text"
+                        placeholder="Ej: Vacalin..."
+                        value={editBrand}
+                        onChange={e => setEditBrand(e.target.value)}
+                        className="w-full glass-input rounded-xl px-2.5 py-1.5 text-xs text-slate-800 bg-white border-pink-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">Presentación</label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={editPackageSize}
+                        onChange={e => setEditPackageSize(e.target.value)}
+                        className="w-full glass-input rounded-xl px-2.5 py-1.5 text-xs text-slate-800 bg-white border-pink-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">Unidad</label>
+                      <select
+                        value={editUnit}
+                        onChange={e => setEditUnit(e.target.value)}
+                        className="w-full glass-input rounded-xl px-2.5 py-1.5 text-xs text-slate-800 bg-white border-pink-200"
+                      >
+                        <option value="g">Gramos (g)</option>
+                        <option value="kg">Kilogramos (kg)</option>
+                        <option value="ml">Mililitros (ml)</option>
+                        <option value="l">Litros (L)</option>
+                        <option value="unidad">Unidades (u)</option>
+                        <option value="paquete">Paquetes</option>
+                        <option value="caja">Cajas</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Calculations */}
+                  <div className="grid grid-cols-3 gap-2.5 pt-1">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">Cantidad</label>
+                      <input
+                        type="number"
+                        min="0.01"
+                        step="any"
+                        required
+                        value={editQuantityBought}
+                        onChange={e => handleEditQuantityChange(e.target.value)}
+                        className="w-full glass-input rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 bg-white border-pink-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">Precio Unit. ($)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={editUnitPrice}
+                        onChange={e => handleEditUnitPriceChange(e.target.value)}
+                        className="w-full glass-input rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 bg-white border-pink-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-rose-600 mb-1">Total ($)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        required
+                        value={editAmount}
+                        onChange={e => handleEditTotalAmountChange(e.target.value)}
+                        className="w-full glass-input rounded-xl px-2.5 py-1.5 text-xs font-black text-rose-600 bg-white border-rose-300"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* NON-INSUMO MODE: Variable, Fijo, General */
+                <div className="space-y-3 p-3.5 rounded-2xl bg-purple-50/40 border border-purple-200/70">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Descripción / Concepto <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Ej: Cajas para tarta, Luz, Cinta de embalar..."
+                      value={editDesc}
+                      onChange={e => setEditDesc(e.target.value)}
+                      className="w-full glass-input rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 bg-white border-pink-200"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2.5">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">Cantidad</label>
+                      <input
+                        type="number"
+                        min="0.01"
+                        step="any"
+                        required
+                        value={editQuantityBought}
+                        onChange={e => handleEditQuantityChange(e.target.value)}
+                        className="w-full glass-input rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 bg-white border-pink-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">Precio Unit. ($)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={editUnitPrice}
+                        onChange={e => handleEditUnitPriceChange(e.target.value)}
+                        className="w-full glass-input rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 bg-white border-pink-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-purple-700 mb-1">Total ($)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        required
+                        value={editAmount}
+                        onChange={e => handleEditTotalAmountChange(e.target.value)}
+                        className="w-full glass-input rounded-xl px-2.5 py-1.5 text-xs font-black text-purple-700 bg-white border-purple-300"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Postre Relacionado <span className="text-slate-400 font-normal">(Opcional)</span>
+                    </label>
+                    <select
+                      value={editRelatedProduct}
+                      onChange={e => setEditRelatedProduct(e.target.value)}
+                      className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 bg-white border-pink-200 cursor-pointer"
+                    >
+                      <option value="">-- Ninguno (Gasto Global) --</option>
+                      {products.map(p => (
+                        <option key={p.id} value={p.name}>
+                          {p.emoji || '🍰'} {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* Date & Notes (Common) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Fecha</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5 text-pink-500" />
+                    <span>Fecha</span>
+                  </label>
                   <input
                     type="date"
                     value={editDate}
@@ -1086,9 +1314,10 @@ export function GastosTab({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Notas / Proveedor</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Notas / Proveedor</label>
                   <input
                     type="text"
+                    placeholder="Ej: Distribuidora packaging, oferta..."
                     value={editNotes}
                     onChange={e => setEditNotes(e.target.value)}
                     className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 bg-white border-pink-200"
@@ -1096,17 +1325,18 @@ export function GastosTab({
                 </div>
               </div>
 
+              {/* Action Buttons */}
               <div className="pt-2 flex items-center justify-end gap-2 border-t border-pink-100">
                 <button
                   type="button"
                   onClick={() => setEditingExpense(null)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:bg-slate-100"
+                  className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-500 hover:bg-slate-100 transition-colors"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-bold text-xs shadow-md shadow-rose-500/20"
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-bold text-xs shadow-md shadow-rose-500/20 active:scale-95 transition-all"
                 >
                   Guardar Cambios
                 </button>

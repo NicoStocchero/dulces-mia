@@ -427,7 +427,18 @@ export async function autoSyncExpenseWithIngredients(expense: {
     if (!match) {
       match = currentIngredients.find(ing => {
         const ingNorm = normalizeText(ing.name)
-        return descNorm.includes(ingNorm) || ingNorm.includes(descNorm)
+
+        // Prevent short words from erroneously matching compound phrases
+        if (descNorm.includes('dulce de leche') !== ingNorm.includes('dulce de leche')) return false
+        if (descNorm.includes('queso crema') !== ingNorm.includes('queso crema')) return false
+        if (descNorm.includes('chocolate blanco') !== ingNorm.includes('chocolate blanco')) return false
+
+        // Match only if full token or strong prefix/suffix matches (> 4 chars)
+        if (descNorm === ingNorm) return true
+        if (descNorm.length > 5 && ingNorm.startsWith(descNorm)) return true
+        if (ingNorm.length > 5 && descNorm.startsWith(ingNorm)) return true
+
+        return false
       })
     }
 

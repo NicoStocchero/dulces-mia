@@ -98,7 +98,8 @@ test.describe('Flujo 3: Compras de Insumos & Control de Stock - E2E Testing', ()
     }
 
     // Click en eliminar el gasto de $3000
-    const deleteExpenseBtn = page.locator('[data-testid="delete-expense-btn"]').first()
+    const expense3000Row = page.locator('tr').filter({ hasText: testInsumoName }).filter({ hasText: /3\.000|3000/ }).first()
+    const deleteExpenseBtn = expense3000Row.locator('[data-testid="delete-expense-btn"]').first()
     await expect(deleteExpenseBtn).toBeVisible({ timeout: 5000 })
     await deleteExpenseBtn.click()
 

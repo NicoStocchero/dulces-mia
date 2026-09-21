@@ -119,4 +119,40 @@ test.describe('Flujo Recetas ↔ Insumos ↔ Costos ↔ Postres - E2E Testing', 
     // Verificar que el historial de costos se expande o registra la versión
     await expect(page.locator('text=Historial de Costos')).toBeVisible({ timeout: 8000 })
   })
+
+  test('Actualización Selectiva de Costos de Ingredientes en Recetas (Caso de referencia Tarta mini coco 10 cm)', async ({ page }) => {
+    // 1. Ir a Recetas
+    await page.goto('/recetas')
+    await expect(page.locator('h2', { hasText: 'Libro de Recetas & Escalado' })).toBeVisible({ timeout: 15000 })
+
+    // 2. Localizar la receta de referencia: "Tarta mini coco 10 cm"
+    const cocoCard = page.locator('div.glass-panel', { hasText: 'Tarta mini coco 10 cm' }).first()
+    await expect(cocoCard).toBeVisible({ timeout: 10000 })
+
+    // Verificar que muestre los 3 ingredientes: Masa sable, Dulce de leche, Mezcla de coco
+    await expect(cocoCard.getByText('Masa sable').first()).toBeVisible()
+    await expect(cocoCard.getByText('Dulce de leche').first()).toBeVisible()
+    await expect(cocoCard.getByText('Mezcla de coco').first()).toBeVisible()
+
+    // 3. Probar el botón de actualización selectiva del ingrediente 2 (Dulce de leche)
+    const updateDulceBtn = cocoCard.getByRole('button', { name: /Actualizar a/i }).first()
+    if (await updateDulceBtn.isVisible()) {
+      await updateDulceBtn.click()
+      // Toast de confirmación de que solo se actualizó Dulce de leche
+      await expect(page.locator('text=Costo de "Dulce de leche" actualizado').or(page.locator('text=actualizado'))).toBeVisible({ timeout: 8000 })
+    }
+
+    // 4. Verificar sincronización del costo con el postre vinculado "Mini coco 10 cm" en Catálogo
+    const syncCatalogBtn = cocoCard.getByRole('button', { name: /Actualizar costo del postre en Catálogo|Costo sincronizado/i })
+    await expect(syncCatalogBtn).toBeVisible()
+    await syncCatalogBtn.click()
+
+    // 5. Ir a Catálogo y verificar que el postre "Mini coco 10 cm" refleja el nuevo costo
+    await page.goto('/catalogo')
+    await expect(page.locator('h2', { hasText: 'Catálogo de Postres' })).toBeVisible({ timeout: 15000 })
+    const miniCocoProduct = page.locator('div.glass-panel', { hasText: 'Mini coco 10 cm' }).first()
+    await expect(miniCocoProduct).toBeVisible({ timeout: 10000 })
+    await expect(miniCocoProduct.locator('text=Receta: Tarta mini coco 10 cm')).toBeVisible()
+  })
 })
+

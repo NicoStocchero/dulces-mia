@@ -65,3 +65,8 @@ ADD COLUMN IF NOT EXISTS unit_price NUMERIC;
 ALTER TABLE recipes 
 ADD COLUMN IF NOT EXISTS cost_history JSONB DEFAULT '[]'::jsonb;
 
+-- 8. Permitir tipos de gastos 'Variable' y 'Fijo' además de 'Insumo' y 'General'
+ALTER TABLE expenses DROP CONSTRAINT IF EXISTS expenses_type_check;
+ALTER TABLE expenses ADD CONSTRAINT expenses_type_check CHECK (type IN ('Insumo', 'Variable', 'Fijo', 'General'));
+
+

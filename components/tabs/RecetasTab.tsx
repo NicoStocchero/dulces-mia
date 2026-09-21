@@ -1,16 +1,17 @@
 'use client'
 
 import React, { useState, useMemo, useRef, useEffect } from 'react'
-import { Recipe, IngredientMaster, RecipeCostSnapshot, Product } from '@/lib/types'
+import { Recipe, RecipeIngredient, IngredientMaster, RecipeCostSnapshot, Product } from '@/lib/types'
 import { fetchMasterIngredients, saveMasterIngredient, deleteMasterIngredient, saveRecipeCostSnapshot } from '@/lib/supabase'
-import { calculateRecipeCost } from '@/components/tabs/CatalogoTab'
-import { BookOpen, PlusCircle, Trash2, Edit3, Sparkles, ChefHat, Tag, Plus, X, AlertCircle, Scale, DollarSign, RefreshCw, Package, History, Lock, TrendingUp, ChevronDown, ChevronUp } from 'lucide-react'
+import { calculateRecipeCost, calculateSingleIngredientCost } from '@/lib/costCalculations'
+import { BookOpen, PlusCircle, Trash2, Edit3, Sparkles, ChefHat, Tag, Plus, X, AlertCircle, Scale, DollarSign, RefreshCw, Package, History, Lock, TrendingUp, ChevronDown, ChevronUp, Check } from 'lucide-react'
 
 interface RecetasTabProps {
   recipes: Recipe[]
   ingredients?: IngredientMaster[]
   products?: Product[]
   onSaveRecipe: (recipe: Omit<Recipe, 'id'> & { id?: string }) => Promise<void>
+  onSaveProduct?: (product: Omit<Product, 'id'> & { id?: string }) => Promise<void>
   onDeleteRecipe: (id: string) => Promise<void>
   showToast: (msg: string) => void
   onNavigateTab?: (tab: any) => void
@@ -57,7 +58,7 @@ function formatScaledQuantity(originalStr: string, multiplier: number): string {
   return `${formattedNum} ${unit}`.trim()
 }
 
-export function RecetasTab({ recipes, ingredients: propIngredients, products = [], onSaveRecipe, onDeleteRecipe, showToast, onNavigateTab }: RecetasTabProps) {
+export function RecetasTab({ recipes, ingredients: propIngredients, products = [], onSaveRecipe, onSaveProduct, onDeleteRecipe, showToast, onNavigateTab }: RecetasTabProps) {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isInsumosModalOpen, setIsInsumosModalOpen] = useState(false)
   const [editingRecipe, setEditingRecipe] = useState<Partial<Recipe> | null>(null)
@@ -79,7 +80,7 @@ export function RecetasTab({ recipes, ingredients: propIngredients, products = [
   const [laborHours, setLaborHours] = useState('')
   const [steps, setSteps] = useState('')
   const [notes, setNotes] = useState('')
-  const [ingredients, setIngredients] = useState<{ name: string; quantity: string }[]>([
+  const [ingredients, setIngredients] = useState<RecipeIngredient[]>([
     { name: '', quantity: '' }
   ])
   const [loading, setLoading] = useState(false)
@@ -88,6 +89,57 @@ export function RecetasTab({ recipes, ingredients: propIngredients, products = [
   const [multipliers, setMultipliers] = useState<Record<string, number>>({})
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null)
   const [savingVersionId, setSavingVersionId] = useState<string | null>(null)
+
+  // Selective individual ingredient cost update
+  const handleUpdateSingleIngredient = async (recipe: Recipe, ingredientIndex: number, newCost: number) => {
+    const nextIngredients = [...recipe.ingredients]
+    nextIngredients[ingredientIndex] = {
+      ...nextIngredients[ingredientIndex],
+      cost_override: newCost
+    }
+    const updated: Recipe = {
+      ...recipe,
+      ingredients: nextIngredients
+    }
+    await onSaveRecipe(updated)
+    showToast(`✓ Costo de "${nextIngredients[ingredientIndex].name}" actualizado a ${fmt(newCost)} en ${recipe.title}`)
+  }
+
+  const handleResetSingleIngredient = async (recipe: Recipe, ingredientIndex: number) => {
+    const nextIngredients = [...recipe.ingredients]
+    const current = { ...nextIngredients[ingredientIndex] }
+    delete current.cost_override
+    nextIngredients[ingredientIndex] = current
+    const updated: Recipe = {
+      ...recipe,
+      ingredients: nextIngredients
+    }
+    await onSaveRecipe(updated)
+    showToast(`✓ Ingrediente "${current.name}" restablecido a cálculo automático`)
+  }
+
+  const handlePromptCustomIngredientCost = async (recipe: Recipe, ingredientIndex: number, currentCost: number) => {
+    const ingName = recipe.ingredients[ingredientIndex]?.name || 'Ingrediente'
+    const input = window.prompt(`Ingresá el costo para "${ingName}" en esta receta ($):`, currentCost.toString())
+    if (input === null) return
+    const parsed = parseFloat(input)
+    if (isNaN(parsed) || parsed < 0) {
+      showToast('⚠️ Ingresá un monto válido')
+      return
+    }
+    await handleUpdateSingleIngredient(recipe, ingredientIndex, parsed)
+  }
+
+  const handleSyncRecipeCostToProduct = async (product: Product, newUnitCost: number) => {
+    if (!onSaveProduct) return
+    await onSaveProduct({
+      ...product,
+      cost: newUnitCost,
+      manual_cost: newUnitCost,
+      is_auto_cost: false
+    })
+    showToast(`✓ Costo de "${product.name}" sincronizado a ${fmt(newUnitCost)} en Catálogo`)
+  }
 
   const handleSaveCostVersion = async (r: Recipe) => {
     setSavingVersionId(r.id)
@@ -183,9 +235,9 @@ export function RecetasTab({ recipes, ingredients: propIngredients, products = [
     setIngredients(ingredients.filter((_, i) => i !== idx))
   }
 
-  const handleIngredientChange = (idx: number, field: 'name' | 'quantity', val: string) => {
+  const handleIngredientChange = (idx: number, field: keyof RecipeIngredient, val: any) => {
     const next = [...ingredients]
-    next[idx][field] = val
+    next[idx] = { ...next[idx], [field]: val }
     setIngredients(next)
   }
 
@@ -204,7 +256,13 @@ export function RecetasTab({ recipes, ingredients: propIngredients, products = [
       return
     }
 
-    const cleanIngredients = ingredients.filter(i => i.name.trim() !== '')
+    const cleanIngredients: RecipeIngredient[] = ingredients
+      .filter(i => i.name.trim() !== '')
+      .map(i => ({
+        name: i.name.trim(),
+        quantity: i.quantity.trim(),
+        cost_override: typeof i.cost_override === 'number' && !isNaN(i.cost_override) ? i.cost_override : undefined
+      }))
 
     setLoading(true)
     await onSaveRecipe({
@@ -360,25 +418,50 @@ export function RecetasTab({ recipes, ingredients: propIngredients, products = [
                     const costData = calculateRecipeCost(r, masterIngredients)
                     if (linkedProduct) {
                       const marginPercent = linkedProduct.price > 0 ? (((linkedProduct.price - costData.unitCost) / linkedProduct.price) * 100).toFixed(0) : '0'
+                      const isCostDifferent = Math.abs((linkedProduct.cost || 0) - costData.unitCost) > 0.01
+
                       return (
-                        <div className="flex items-center justify-between p-2.5 rounded-2xl bg-pink-50/70 border border-pink-200/80 text-xs mb-3">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="text-base flex-shrink-0">{linkedProduct.emoji || '🍰'}</span>
-                            <div className="min-w-0">
-                              <span className="font-bold text-slate-800 block truncate">Postre: {linkedProduct.name}</span>
-                              <span className="text-[10px] text-slate-500 block truncate">
-                                Venta: <strong>{fmt(linkedProduct.price)}</strong> | Margen: <strong className="text-emerald-600 font-bold">{marginPercent}%</strong>
-                              </span>
+                        <div className="p-2.5 rounded-2xl bg-pink-50/70 border border-pink-200/80 text-xs mb-3 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-base flex-shrink-0">{linkedProduct.emoji || '🍰'}</span>
+                              <div className="min-w-0">
+                                <span className="font-bold text-slate-800 block truncate">Postre: {linkedProduct.name}</span>
+                                <span className="text-[10px] text-slate-500 block truncate">
+                                  Venta: <strong>{fmt(linkedProduct.price)}</strong> | Costo Catálogo: <strong className="text-rose-600 font-bold">{fmt(linkedProduct.cost || 0)}</strong> | Margen: <strong className="text-emerald-600 font-bold">{marginPercent}%</strong>
+                                </span>
+                              </div>
                             </div>
+                            {onNavigateTab && (
+                              <button
+                                type="button"
+                                onClick={() => onNavigateTab('catalogo')}
+                                className="text-[11px] font-bold text-pink-600 hover:text-pink-700 underline flex items-center gap-0.5 flex-shrink-0 ml-2"
+                                title="Ver y editar en el catálogo de postres"
+                              >
+                                Catálogo →
+                              </button>
+                            )}
                           </div>
-                          {onNavigateTab && (
+
+                          {/* Button to sync cost directly to linked product */}
+                          {onSaveProduct && (
                             <button
                               type="button"
-                              onClick={() => onNavigateTab('catalogo')}
-                              className="text-[11px] font-bold text-pink-600 hover:text-pink-700 underline flex items-center gap-0.5 flex-shrink-0 ml-2"
-                              title="Ver y editar en el catálogo de postres"
+                              onClick={() => handleSyncRecipeCostToProduct(linkedProduct, costData.unitCost)}
+                              className={`w-full py-1.5 px-3 rounded-xl text-xs font-bold shadow-xs flex items-center justify-center gap-1.5 transition-all ${
+                                isCostDifferent
+                                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white animate-pulse'
+                                  : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
+                              }`}
+                              title="Sincronizar costo de esta receta con el postre del catálogo"
                             >
-                              Catálogo →
+                              <RefreshCw className="w-3.5 h-3.5" />
+                              <span>
+                                {isCostDifferent
+                                  ? `Actualizar costo del postre en Catálogo a ${fmt(costData.unitCost)}`
+                                  : `Costo sincronizado con Catálogo (${fmt(costData.unitCost)})`}
+                              </span>
                             </button>
                           )}
                         </div>
@@ -461,7 +544,7 @@ export function RecetasTab({ recipes, ingredients: propIngredients, products = [
                     </div>
                   </div>
 
-                  {/* Ingredients List (with scaled amounts) */}
+                  {/* Ingredients List (with scaled amounts & individual selective cost update) */}
                   {r.ingredients && r.ingredients.length > 0 && (
                     <div className="p-4 rounded-2xl bg-pink-50/50 border border-pink-100 mb-4 space-y-2">
                       <div className="flex items-center justify-between mb-2">
@@ -471,19 +554,79 @@ export function RecetasTab({ recipes, ingredients: propIngredients, products = [
                         <span className="text-[10px] text-slate-500">{r.ingredients.length} items</span>
                       </div>
 
-                      <ul className="space-y-2 text-xs text-slate-700">
+                      <ul className="space-y-2.5 text-xs text-slate-700">
                         {r.ingredients.map((ing, i) => {
                           const scaledQty = formatScaledQuantity(ing.quantity, mult)
+                          const ingCost = calculateSingleIngredientCost(ing, masterIngredients)
+                          const canUpdateFromMaster = Boolean(ingCost.matchedMaster && (!ingCost.isOverride || ing.cost_override !== ingCost.calculatedCost))
+
                           return (
-                            <li key={i} className="flex items-center justify-between border-b border-pink-100/60 pb-1.5 last:border-0 last:pb-0">
-                              <span className="font-medium text-slate-800">{ing.name}</span>
-                              <span className={`font-bold px-2 py-0.5 rounded-md text-[11px] ${
-                                mult > 1
-                                  ? 'bg-pink-500 text-white shadow-sm'
-                                  : 'bg-white text-pink-600 border border-pink-200/60'
-                              }`}>
-                                {scaledQty || '-'}
-                              </span>
+                            <li key={i} className="border-b border-pink-100/60 pb-2.5 last:border-0 last:pb-0 space-y-1">
+                              <div className="flex items-center justify-between">
+                                <span className="font-semibold text-slate-800 text-xs flex items-center gap-1.5">
+                                  <span>{ing.name}</span>
+                                  {ingCost.isOverride && (
+                                    <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
+                                      Fijado
+                                    </span>
+                                  )}
+                                </span>
+                                <div className="flex items-center gap-2">
+                                  <span className={`font-bold px-2 py-0.5 rounded-md text-[11px] ${
+                                    mult > 1
+                                      ? 'bg-pink-500 text-white shadow-sm'
+                                      : 'bg-white text-pink-600 border border-pink-200/60'
+                                  }`}>
+                                    {scaledQty || '-'}
+                                  </span>
+                                  <span className="text-xs font-black text-rose-600 min-w-[55px] text-right">
+                                    {fmt(ingCost.cost * mult)}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Selective Update Bar per Ingredient */}
+                              <div className="flex flex-wrap items-center justify-between gap-1 pt-0.5 text-[10px]">
+                                <span className="text-slate-400">
+                                  {ingCost.matchedMaster
+                                    ? `Insumo: ${ingCost.matchedMaster.name} (${ingCost.costPerUnitText})`
+                                    : (ingCost.costPerUnitText || 'Estimado')}
+                                </span>
+
+                                <div className="flex items-center gap-1">
+                                  {canUpdateFromMaster && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleUpdateSingleIngredient(r, i, ingCost.calculatedCost)}
+                                      className="px-2 py-0.5 rounded-lg bg-pink-100/90 hover:bg-pink-200 text-pink-800 font-bold transition-all flex items-center gap-1 shadow-2xs active:scale-95"
+                                      title={`Actualizar solo ${ing.name} al precio de compra de $${ingCost.calculatedCost}`}
+                                    >
+                                      <RefreshCw className="w-3 h-3 text-pink-600" />
+                                      <span>Actualizar a {fmt(ingCost.calculatedCost)}</span>
+                                    </button>
+                                  )}
+
+                                  {ingCost.isOverride && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleResetSingleIngredient(r, i)}
+                                      className="px-1.5 py-0.5 rounded-lg text-slate-400 hover:text-slate-600 text-[9px] underline"
+                                      title="Quitar costo fijado y volver al cálculo dinámico del catálogo"
+                                    >
+                                      Auto
+                                    </button>
+                                  )}
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handlePromptCustomIngredientCost(r, i, ingCost.cost)}
+                                    className="p-1 rounded-md text-slate-400 hover:text-pink-600 hover:bg-pink-100 transition-colors"
+                                    title="Editar manualmente el costo de este ingrediente"
+                                  >
+                                    <Edit3 className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              </div>
                             </li>
                           )
                         })}
@@ -875,7 +1018,7 @@ export function RecetasTab({ recipes, ingredients: propIngredients, products = [
                       </div>
 
                       {/* Master Insumos Quick Selector Pills & Prorated Cost Preview */}
-                      <div className="flex items-center justify-between pt-1 text-[11px]">
+                      <div className="flex flex-wrap items-center justify-between gap-1 pt-1 text-[11px]">
                         {masterIngredients.length > 0 && !ing.name ? (
                           <div className="flex items-center gap-1 overflow-x-auto">
                             <span className="text-[10px] text-slate-400 whitespace-nowrap">Sugerencias:</span>
@@ -897,11 +1040,41 @@ export function RecetasTab({ recipes, ingredients: propIngredients, products = [
                               : 'Ingrediente personalizado'}
                           </span>
                         )}
-                        {ing.name && ing.quantity && (
-                          <span className="font-bold text-pink-600 ml-auto">
-                            Costo estimado: {fmt(calculateRecipeCost({ id: 'tmp', title: '', ingredients: [{ name: ing.name, quantity: ing.quantity }] }, masterIngredients).totalCost)}
-                          </span>
-                        )}
+
+                        {ing.name && ing.quantity && (() => {
+                          const ingCost = calculateSingleIngredientCost(ing, masterIngredients)
+                          return (
+                            <div className="flex items-center gap-2 ml-auto">
+                              <span className="text-[10px] text-slate-500">
+                                Costo: <strong className="text-pink-600">{fmt(ingCost.cost)}</strong>
+                                {ingCost.isOverride && <span className="ml-1 text-[9px] text-amber-600 font-bold">(Fijado)</span>}
+                              </span>
+
+                              {ingCost.matchedMaster && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleIngredientChange(idx, 'cost_override', ingCost.calculatedCost)}
+                                  className="px-1.5 py-0.5 rounded bg-pink-100 hover:bg-pink-200 text-pink-700 font-bold text-[9px] flex items-center gap-0.5"
+                                  title="Fijar con el último precio de compra del catálogo"
+                                >
+                                  <RefreshCw className="w-2.5 h-2.5" />
+                                  <span>Último: {fmt(ingCost.calculatedCost)}</span>
+                                </button>
+                              )}
+
+                              {ing.cost_override !== undefined && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleIngredientChange(idx, 'cost_override', undefined)}
+                                  className="text-[9px] text-slate-400 hover:text-slate-600 underline"
+                                  title="Quitar costo fijado y usar catálogo dinámico"
+                                >
+                                  Auto
+                                </button>
+                              )}
+                            </div>
+                          )
+                        })()}
                       </div>
                     </div>
                   ))}
