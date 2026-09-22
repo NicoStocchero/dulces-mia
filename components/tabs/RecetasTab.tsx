@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react'
 import { Recipe, RecipeIngredient, IngredientMaster, RecipeCostSnapshot, Product } from '@/lib/types'
 import { fetchMasterIngredients, saveMasterIngredient, deleteMasterIngredient, saveRecipeCostSnapshot } from '@/lib/supabase'
-import { calculateRecipeCost, calculateSingleIngredientCost } from '@/lib/costCalculations'
+import { calculateRecipeCost, calculateSingleIngredientCost, normalizeUnit } from '@/lib/costCalculations'
 import { BookOpen, PlusCircle, Trash2, Edit3, Sparkles, ChefHat, Tag, Plus, X, AlertCircle, Scale, DollarSign, RefreshCw, Package, History, Lock, TrendingUp, ChevronDown, ChevronUp, Check } from 'lucide-react'
 
 interface RecetasTabProps {
@@ -90,6 +90,17 @@ export function RecetasTab({ recipes, ingredients: propIngredients, products = [
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null)
   const [savingVersionId, setSavingVersionId] = useState<string | null>(null)
 
+  // Interactive custom ingredient cost modal
+  const [customCostModal, setCustomCostModal] = useState<{
+    recipe: Recipe
+    ingredientIndex: number
+    ingName: string
+    currentCost: number
+    isOverride: boolean
+  } | null>(null)
+  const [customCostVal, setCustomCostVal] = useState('')
+  const [selectedMasterForModal, setSelectedMasterForModal] = useState('')
+
   // Selective individual ingredient cost update
   const handleUpdateSingleIngredient = async (recipe: Recipe, ingredientIndex: number, newCost: number) => {
     const nextIngredients = [...recipe.ingredients]
@@ -118,16 +129,54 @@ export function RecetasTab({ recipes, ingredients: propIngredients, products = [
     showToast(`✓ Ingrediente "${current.name}" restablecido a cálculo automático`)
   }
 
-  const handlePromptCustomIngredientCost = async (recipe: Recipe, ingredientIndex: number, currentCost: number) => {
+  const handleOpenCustomCost = (recipe: Recipe, ingredientIndex: number, currentCost: number, isOverride: boolean) => {
     const ingName = recipe.ingredients[ingredientIndex]?.name || 'Ingrediente'
-    const input = window.prompt(`Ingresá el costo para "${ingName}" en esta receta ($):`, currentCost.toString())
-    if (input === null) return
-    const parsed = parseFloat(input)
+    setCustomCostModal({ recipe, ingredientIndex, ingName, currentCost, isOverride })
+    setCustomCostVal(currentCost.toString())
+    setSelectedMasterForModal('')
+  }
+
+  const handleSelectMasterInModal = (masterId: string) => {
+    setSelectedMasterForModal(masterId)
+    if (!customCostModal || !masterId) return
+    const master = masterIngredients.find(m => m.id === masterId)
+    if (!master) return
+    const ing = customCostModal.recipe.ingredients[customCostModal.ingredientIndex]
+    if (!ing) return
+
+    const match = (ing.quantity || '').toString().match(/^([\d.,]+)\s*([a-zA-ZáéíóúÁÉÍÓÚ\s]*)$/)
+    if (match) {
+      const num = parseFloat(match[1].replace(',', '.')) || 0
+      const rawUnit = (match[2] || '').trim()
+      const recipeUnit = normalizeUnit(rawUnit)
+      const masterUnit = normalizeUnit(master.unit || 'g')
+      const pkgCost = master.package_cost || 0
+      const pkgSize = master.package_size || 1000
+
+      let costPerBaseUnit = 0
+      if (masterUnit === 'kg' || masterUnit === 'l') {
+        costPerBaseUnit = pkgCost / (pkgSize * 1000)
+      } else {
+        costPerBaseUnit = pkgCost / pkgSize
+      }
+
+      let qtyInBaseUnit = num
+      if (recipeUnit === 'kg' || recipeUnit === 'l') qtyInBaseUnit = num * 1000
+
+      const calculated = Math.round(qtyInBaseUnit * costPerBaseUnit * 100) / 100
+      setCustomCostVal(calculated.toString())
+    }
+  }
+
+  const handleSaveCustomCostModal = async () => {
+    if (!customCostModal) return
+    const parsed = parseFloat(customCostVal)
     if (isNaN(parsed) || parsed < 0) {
       showToast('⚠️ Ingresá un monto válido')
       return
     }
-    await handleUpdateSingleIngredient(recipe, ingredientIndex, parsed)
+    await handleUpdateSingleIngredient(customCostModal.recipe, customCostModal.ingredientIndex, parsed)
+    setCustomCostModal(null)
   }
 
   const handleSyncRecipeCostToProduct = async (product: Product, newUnitCost: number) => {
@@ -606,6 +655,13 @@ export function RecetasTab({ recipes, ingredients: propIngredients, products = [
                                     </button>
                                   )}
 
+                                  {ingCost.isOverride && ing.cost_override === ingCost.calculatedCost && Boolean(ingCost.matchedMaster) && (
+                                    <span className="text-[9px] text-emerald-700 font-bold bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                                      <Check className="w-2.5 h-2.5" />
+                                      <span>Al día</span>
+                                    </span>
+                                  )}
+
                                   {ingCost.isOverride && (
                                     <button
                                       type="button"
@@ -619,9 +675,9 @@ export function RecetasTab({ recipes, ingredients: propIngredients, products = [
 
                                   <button
                                     type="button"
-                                    onClick={() => handlePromptCustomIngredientCost(r, i, ingCost.cost)}
+                                    onClick={() => handleOpenCustomCost(r, i, ingCost.cost, ingCost.isOverride)}
                                     className="p-1 rounded-md text-slate-400 hover:text-pink-600 hover:bg-pink-100 transition-colors"
-                                    title="Editar manualmente el costo de este ingrediente"
+                                    title="Editar o fijar manualmente el costo de este ingrediente"
                                   >
                                     <Edit3 className="w-3 h-3" />
                                   </button>
@@ -867,6 +923,108 @@ export function RecetasTab({ recipes, ingredients: propIngredients, products = [
                   </div>
                 )
               })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Individual Ingredient Cost Edit Modal */}
+      {customCostModal && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md overflow-y-auto">
+          <div className="glass-panel-glow rounded-3xl p-6 max-w-md w-full border border-pink-300 bg-white shadow-2xl space-y-4 animate-scale-up my-8">
+            <div className="flex items-center justify-between border-b border-pink-100 pb-3">
+              <div className="flex items-center gap-2">
+                <Edit3 className="w-5 h-5 text-pink-500" />
+                <div>
+                  <h3 className="font-playfair text-lg font-bold text-slate-900">Ajustar Costo de Ingrediente</h3>
+                  <p className="text-xs text-slate-500 font-semibold">{customCostModal.recipe.title}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCustomCostModal(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="p-3 rounded-2xl bg-pink-50/60 border border-pink-200/80">
+                <span className="text-[10px] text-slate-500 block uppercase font-bold tracking-wider mb-0.5">Ingrediente Seleccionado</span>
+                <span className="text-sm font-bold text-slate-800">{customCostModal.ingName}</span>
+                <span className="text-xs text-slate-500 ml-2">({customCostModal.recipe.ingredients[customCostModal.ingredientIndex]?.quantity})</span>
+              </div>
+
+              {/* Option A: Link with master ingredient from catalog */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Vincular o Calcular con Insumo del Catálogo
+                </label>
+                <select
+                  value={selectedMasterForModal}
+                  onChange={e => handleSelectMasterInModal(e.target.value)}
+                  className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 bg-white border-pink-200"
+                >
+                  <option value="">-- Seleccionar insumo para calcular costo auto --</option>
+                  {masterIngredients.map(m => (
+                    <option key={m.id} value={m.id}>
+                      {m.name} ({m.package_size} {m.unit} = {fmt(m.package_cost)})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Option B: Manual Cost Input */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Costo Fijado para esta Receta ($)</span>
+                  <span className="text-[10px] text-pink-600 font-normal">Afecta solo a {customCostModal.recipe.title}</span>
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={customCostVal}
+                  onChange={e => setCustomCostVal(e.target.value)}
+                  className="w-full glass-input rounded-xl px-4 py-2.5 text-base font-black text-rose-600 bg-white border-pink-300"
+                />
+              </div>
+
+              {/* Reset to Auto Option */}
+              {customCostModal.isOverride && (
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await handleResetSingleIngredient(customCostModal.recipe, customCostModal.ingredientIndex)
+                      setCustomCostModal(null)
+                    }}
+                    className="text-xs text-slate-500 hover:text-slate-700 underline font-semibold flex items-center gap-1"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Quitar costo fijado y volver al cálculo dinámico del catálogo</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-pink-100">
+                <button
+                  type="button"
+                  onClick={() => setCustomCostModal(null)}
+                  className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-500 hover:bg-slate-100 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveCustomCostModal}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-bold text-xs shadow-md shadow-pink-500/20 active:scale-95 transition-all"
+                >
+                  Guardar Costo en Receta
+                </button>
+              </div>
             </div>
           </div>
         </div>

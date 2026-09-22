@@ -223,7 +223,7 @@ export function GastosTab({
       description: editDesc.trim(),
       amount: parsedAmount,
       type: editType,
-      brand: editType === 'Insumo' ? (editBrand.trim() || undefined) : undefined,
+      brand: editBrand.trim() || undefined,
       notes: editNotes.trim() || undefined,
       package_size: editType === 'Insumo' ? (parseFloat(editPackageSize) || undefined) : undefined,
       unit: editType === 'Insumo' ? editUnit : undefined,
@@ -275,7 +275,7 @@ export function GastosTab({
       related_product: type === 'Insumo' ? '' : (relatedProduct || ''),
       date: selectedDateTime,
       ingredient_id: type === 'Insumo' && selectedIngredientId ? selectedIngredientId : undefined,
-      brand: type === 'Insumo' ? (brand.trim() || undefined) : undefined,
+      brand: brand.trim() || undefined,
       notes: expenseNotes.trim() || undefined,
       package_size: parsedPkgSize,
       unit: type === 'Insumo' ? unit : undefined,
@@ -683,7 +683,20 @@ export function GastosTab({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Marca / Fabricante <span className="text-slate-400 font-normal">(Opcional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ej: Doña Clara, Papelera San Martín..."
+                      value={brand}
+                      onChange={e => setBrand(e.target.value)}
+                      className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 bg-white"
+                    />
+                  </div>
+
                   {/* Related Product (Optional only for packaging / specific variables) */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -692,7 +705,7 @@ export function GastosTab({
                     <select
                       value={relatedProduct}
                       onChange={e => setRelatedProduct(e.target.value)}
-                      className="w-full glass-input rounded-xl px-4 py-2.5 text-xs text-slate-800 appearance-none cursor-pointer bg-white border-pink-200"
+                      className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 appearance-none cursor-pointer bg-white border-pink-200"
                     >
                       <option value="">-- Ninguno (Gasto Global) --</option>
                       {products.map(p => (
@@ -709,7 +722,7 @@ export function GastosTab({
                     </label>
                     <input
                       type="text"
-                      placeholder="Ej: Comprado en distribuidora packaging..."
+                      placeholder="Ej: Distribuidora packaging..."
                       value={expenseNotes}
                       onChange={e => setExpenseNotes(e.target.value)}
                       className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 bg-white"
@@ -1279,22 +1292,36 @@ export function GastosTab({
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Postre Relacionado <span className="text-slate-400 font-normal">(Opcional)</span>
-                    </label>
-                    <select
-                      value={editRelatedProduct}
-                      onChange={e => setEditRelatedProduct(e.target.value)}
-                      className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 bg-white border-pink-200 cursor-pointer"
-                    >
-                      <option value="">-- Ninguno (Gasto Global) --</option>
-                      {products.map(p => (
-                        <option key={p.id} value={p.name}>
-                          {p.emoji || '🍰'} {p.name}
-                        </option>
-                      ))}
-                    </select>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Marca / Fabricante <span className="text-slate-400 font-normal">(Opcional)</span>
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ej: Doña Clara, Pack&Co, San Martín..."
+                        value={editBrand}
+                        onChange={e => setEditBrand(e.target.value)}
+                        className="w-full glass-input rounded-xl px-2.5 py-1.5 text-xs text-slate-800 bg-white border-pink-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Postre Relacionado <span className="text-slate-400 font-normal">(Opcional)</span>
+                      </label>
+                      <select
+                        value={editRelatedProduct}
+                        onChange={e => setEditRelatedProduct(e.target.value)}
+                        className="w-full glass-input rounded-xl px-2.5 py-1.5 text-xs text-slate-800 bg-white border-pink-200 cursor-pointer"
+                      >
+                        <option value="">-- Ninguno (Gasto Global) --</option>
+                        {products.map(p => (
+                          <option key={p.id} value={p.name}>
+                            {p.emoji || '🍰'} {p.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 </div>
               )}

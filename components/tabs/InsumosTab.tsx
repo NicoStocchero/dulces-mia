@@ -45,6 +45,7 @@ export function InsumosTab({ ingredients, onSaveIngredient, onRecordPurchase, on
   const [packageCost, setPackageCost] = useState('')
   const [stockQty, setStockQty] = useState('1000')
   const [minStock, setMinStock] = useState('200')
+  const [brand, setBrand] = useState('')
 
   // Purchase Form State
   const [purchaseDate, setPurchaseDate] = useState(() => new Date().toISOString().split('T')[0])
@@ -89,6 +90,7 @@ export function InsumosTab({ ingredients, onSaveIngredient, onRecordPurchase, on
     setEditingInsumo(null)
     setName('')
     setCategory('Varios')
+    setBrand('')
     setUnit('g')
     setPackageSize('1000')
     setPackageCost('')
@@ -101,6 +103,7 @@ export function InsumosTab({ ingredients, onSaveIngredient, onRecordPurchase, on
     setEditingInsumo(item)
     setName(item.name)
     setCategory(item.category || 'Varios')
+    setBrand(item.brand || '')
     setUnit(item.unit || 'g')
     setPackageSize(item.package_size.toString())
     setPackageCost(item.package_cost.toString())
@@ -143,6 +146,7 @@ export function InsumosTab({ ingredients, onSaveIngredient, onRecordPurchase, on
       id: editingInsumo?.id,
       name: name.trim(),
       category,
+      brand: brand.trim() || undefined,
       unit,
       package_size: sizeNum,
       package_cost: costNum,
@@ -155,6 +159,7 @@ export function InsumosTab({ ingredients, onSaveIngredient, onRecordPurchase, on
           package_cost: costNum,
           package_size: sizeNum,
           unit,
+          brand: brand.trim() || undefined,
           notes: 'Registro inicial de insumo'
         }
       ]
@@ -502,18 +507,33 @@ export function InsumosTab({ ingredients, onSaveIngredient, onRecordPurchase, on
                 />
               </div>
 
-              {/* Category */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Categoría</label>
-                <select
-                  value={category}
-                  onChange={e => setCategory(e.target.value)}
-                  className="w-full glass-input rounded-xl px-4 py-2 text-xs text-slate-800 bg-white border-pink-200"
-                >
-                  {CATEGORIES.filter(c => c !== 'Todas').map(c => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
+              {/* Category & Brand */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Categoría</label>
+                  <select
+                    value={category}
+                    onChange={e => setCategory(e.target.value)}
+                    className="w-full glass-input rounded-xl px-4 py-2 text-xs text-slate-800 bg-white border-pink-200"
+                  >
+                    {CATEGORIES.filter(c => c !== 'Todas').map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Marca <span className="text-slate-400 font-normal">(Opcional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej: Vacalin, Serenísima, Mapsa..."
+                    value={brand}
+                    onChange={e => setBrand(e.target.value)}
+                    className="w-full glass-input rounded-xl px-4 py-2 text-xs text-slate-800 bg-white border-pink-200"
+                  />
+                </div>
               </div>
 
               {/* Package Format */}
